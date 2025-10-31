@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "build": "yarn tsc",
+    "build": "tsc",
     "start": "ts-node main.ts",
     "tbin": "ts-node main.ts"
   },

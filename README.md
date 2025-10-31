@@ -1,1 +1,2 @@
 # NBAProject
+This project is meant to keep track of the top 5 MVP canditates throughout the season. It scrapes data fron https://www.basketball-reference.com/ and uses the formulas from (PUT PAPER OR SOURCE HERE) to determine the players who are having the best and most impactful seasons. This project also uses docker to start a local database to keep track of the standings every time the web automation runs. 

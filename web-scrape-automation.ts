@@ -36,7 +36,7 @@ export async function main() {
   await wait (5000);
 
 
-  const uri = 'mongodb://localhost:8000/compassionate_gagarin';
+ /* const uri = 'mongodb://localhost:8000/compassionate_gagarin';
   const client = new MongoClient(uri);
 
   async function connectToDatabase() {
@@ -73,7 +73,7 @@ export async function main() {
     } catch (err) {
       console.error('Error inserting entry into MongoDB:', err);
     }
-  }
+  } */
 
   /*const db = client.db('NbaDb');
   const collection = db.collection('yourCollectionName');

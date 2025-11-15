@@ -1,7 +1,7 @@
 import { MongoClient } from 'mongodb';
 
 export async function saveToMongo(data: any[]) {
-  const uri = 'put_connection_string_here';
+  const uri = 'mongodb+srv://alex_db_user:sCmRATaxkJipdruw@nba-stats-leaders.kdgfez3.mongodb.net/?appName=NBA-Stats-Leaders';
   const client = new MongoClient(uri);
 
   try {

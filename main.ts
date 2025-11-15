@@ -1,4 +1,4 @@
-import { main } from "./web-scrape-automation";
+import { main } from "./web-automation";
 
 void main()
   .then(() => {

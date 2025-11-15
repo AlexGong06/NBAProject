@@ -1,8 +1,8 @@
-import { wait } from "./wait";
-import { saveToMongo } from "./insert-data-into-database";
-import { scrapeDailyStatsLeaders } from "./scrape-daily-stats-leaders";
-import { scrapePlayerStatistics } from "./scrape-player-statistics";
-import { calculateAllPlayerValues } from "./calculate-player-value";
+import { wait } from "./services/utils/wait";
+import { saveToMongo } from "./services/database/insert-data-into-database";
+import { scrapeDailyStatsLeaders } from "./services/scraper/scrape-daily-stats-leaders";
+import { scrapePlayerStatistics } from "./services/scraper/scrape-player-statistics";
+import { calculateAllPlayerValues } from "./services/mvp-calculation/calculate-player-value";
 
 
 export async function main() {

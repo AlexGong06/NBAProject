@@ -1,6 +1,6 @@
 import { Page } from "playwright";
-import { wait } from "./wait";
-import { PlayerSummary } from "./types";
+import { wait } from "../utils/wait";
+import { PlayerSummary } from "../utils/types";
 
 
 export async function fetchPlayerAdvancedStats(

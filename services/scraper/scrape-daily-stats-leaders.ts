@@ -1,5 +1,5 @@
 import { chromium, Page } from "playwright";
-import { wait } from "./wait";
+import { wait } from "../utils/wait";
 
 export async function scrapeDailyStatsLeaders() {
     const browser = await chromium.launch({ headless: true });

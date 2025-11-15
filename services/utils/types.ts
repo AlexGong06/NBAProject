@@ -1,6 +1,6 @@
 // export schemas here
 export interface PlayerSummary {
-  rank: string;
+  websiteRank: string;
   player: string;
   profileUrl: string;  // <-- stored from the table link
   teamWins: number;
@@ -21,8 +21,11 @@ export interface PlayerSummary {
   winShare: number | null;
   boxPlusMinus: number | null;
   trueShootingPercentage: number | null;
+
+  calculatedRank: number | null;
 }
 
 export interface PlayerWithValue extends PlayerSummary {
   mvpValue: number;
+  calculatedRank: number;
 }

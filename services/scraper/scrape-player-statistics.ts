@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { wait } from "./wait";
+import { wait } from "../utils/wait";
 import {fetchPlayerAdvancedStats} from "./scrape-player-advanced-stats"
 
 export async function scrapePlayerStatistics() {
@@ -38,8 +38,7 @@ export async function scrapePlayerStatistics() {
 
             const linkEl = row.querySelector("td[data-stat='player'] a") as HTMLAnchorElement;
             const profileUrl = linkEl?.href || "";
-
-            const rank = getText("th[data-stat='ranker']")
+            const websiteRank = getText("th[data-stat='ranker']")
             const player = getText("td[data-stat='player']");
             const teamWins = parseInt(getText("td[data-stat='wins']"), 10);
             const teamGamesPlayed = parseInt(getText("td[data-stat='g']"), 10);
@@ -54,7 +53,7 @@ export async function scrapePlayerStatistics() {
             const turnoversPerGame = parseFloat(getText("td[data-stat='tov_per_g']"));
 
             return {
-                rank,
+                websiteRank,
                 player,
                 profileUrl,
                 teamWins,
@@ -73,6 +72,7 @@ export async function scrapePlayerStatistics() {
                 stealsPerGame,
                 foulsPerGame,
                 turnoversPerGame,
+                calculatedRank: null
             };
         });
 

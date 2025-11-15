@@ -5,7 +5,7 @@
 // Total Stats = (Points * True Shooting % * 1.5(Assists) + 1.2(Rebounds) + 3(Blocks) + 3(Steals) - Fouls - Turnovers) / 25
 // Link to the top 10 MVP candidates: https://www.basketball-reference.com/friv/mvp.html
 
-import { PlayerSummary, PlayerWithValue } from "./types";
+import { PlayerSummary, PlayerWithValue } from "../utils/types";
 
 /* 
     playerObject = {
@@ -78,7 +78,7 @@ function calculatePlayerValue(player: PlayerSummary): number {
 
 
 export function calculateAllPlayerValues(players: PlayerSummary[]): PlayerWithValue[] {
-  return players
+  const sortedPlayers =  players
     .map(player => {
       const mvpValue = calculatePlayerValue(player);
       return {
@@ -87,5 +87,12 @@ export function calculateAllPlayerValues(players: PlayerSummary[]): PlayerWithVa
       };
     })
     .sort((a, b) => b.mvpValue - a.mvpValue); // highest value first
+
+  // 3. Assign calculatedRank
+  sortedPlayers.forEach((player, index) => {
+    player.calculatedRank = index + 1;
+  });
+
+  return sortedPlayers;
 }
 

@@ -1,8 +1,8 @@
 // export schemas here
-export interface PlayerSummary {
-  websiteRank: string;
+export interface FullPlayerSummary {
   player: string;
-  profileUrl: string;  // <-- stored from the table link
+  profileUrl: string; // <-- stored from the table link
+  team: string;
   teamWins: number;
   teamGamesPlayed: number;
   gamesStarted: number;
@@ -14,18 +14,31 @@ export interface PlayerSummary {
   stealsPerGame: number;
   foulsPerGame: number;
   turnoversPerGame: number;
-
-  // Will be filled after navigating to profile pages:
-  usageRate: number | null;
-  valueOverReplacement: number | null;
-  winShare: number | null;
-  boxPlusMinus: number | null;
-  trueShootingPercentage: number | null;
-
-  calculatedRank: number | null;
+  usageRate: number;
+  valueOverReplacement: number;
+  winShare: number;
+  boxPlusMinus: number;
+  trueShootingPercentage: number;
 }
 
-export interface PlayerWithValue extends PlayerSummary {
+export interface PlayerWithCalculatedMvpValue extends FullPlayerSummary {
   mvpValue: number;
   calculatedRank: number;
+}
+
+export interface PlayerMvpSummary {
+  websiteRanking: string;
+  player: string;
+  profileUrl: string; // <-- stored from the table link
+  teamWins: number;
+  teamGamesPlayed: number;
+  gamesStarted: number;
+  minutesPerGame: number;
+  pointsPerGame: number;
+  assistsPerGame: number;
+  reboundsPerGame: number;
+  blocksPerGame: number;
+  stealsPerGame: number;
+  foulsPerGame: number;
+  turnoversPerGame: number;
 }

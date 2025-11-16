@@ -5,47 +5,22 @@
 // Total Stats = (Points * True Shooting % * 1.5(Assists) + 1.2(Rebounds) + 3(Blocks) + 3(Steals) - Fouls - Turnovers) / 25
 // Link to the top 10 MVP candidates: https://www.basketball-reference.com/friv/mvp.html
 
-import { PlayerSummary, PlayerWithValue } from "../utils/types";
+import {
+  FullPlayerSummary,
+  PlayerWithCalculatedMvpValue,
+} from "../utils/types";
 
-/* 
-    playerObject = {
-        player: "Steph Curry",
-        rank: 1,
-        teamWins: 9, // on mvp tracker page
-        teamGamesPlayed: 10, // on mvp tracker page
-        gamesStarted: 10, // on mvp tracker page
-        minutesPerGame: 32, // on mvp tracker page
-        usageRate: 28.4,
-        valueOverReplacement: 4.3,
-        winShare: 8.1,
-        boxPlusMinus: 18,
-        pointsPerGame: 29.4, // on mvp tracker page
-        trueShootingPercentage: 0.634,
-        assistsPerGame: 5.8, // on mvp tracker page
-        reboundsPerGame: 4.5, // on mvp tracker page
-        blocksPerGame: 0.3, // on mvp tracker page
-        stealsPerGame: 0.5, // on mvp tracker page
-        foulsPerGame: 2.6, // on mvp tracker page
-        turnoversPerGame: 1.3 // on mvp tracker page
-    }
-*/
-
-
-function calculatePlayerValue(player: PlayerSummary): number {
+function calculatePlayerValue(player: FullPlayerSummary): number {
   // ---- Level of Impact Components ----
-  console.log(`calculating mvp value for: ${player.player}`)
+  console.log(`calculating mvp value for: ${player.player}`);
   const teamWinRatio =
-    player.teamGamesPlayed > 0
-      ? player.teamWins / player.teamGamesPlayed
-      : 0;
+    player.teamGamesPlayed > 0 ? player.teamWins / player.teamGamesPlayed : 0;
 
   const minutesFactor = player.minutesPerGame / 48;
 
-  const usageFactor =
-    player.usageRate !== null ? player.usageRate / 100 : 0;
+  const usageFactor = player.usageRate !== null ? player.usageRate / 100 : 0;
 
-  const levelOfImpact =
-    teamWinRatio * minutesFactor * usageFactor;
+  const levelOfImpact = teamWinRatio * minutesFactor * usageFactor;
 
   // ---- Quality of Impact ----
 
@@ -72,27 +47,29 @@ function calculatePlayerValue(player: PlayerSummary): number {
   // ---- Final Total Value ----
 
   const totalValue = 0.5 * winContribution + 0.5 * totalStats;
-  console.log(`mvp value: ${totalValue}`)
+  console.log(`mvp value: ${totalValue}`);
   return totalValue;
 }
 
-
-export function calculateAllPlayerValues(players: PlayerSummary[]): PlayerWithValue[] {
-  const sortedPlayers =  players
-    .map(player => {
+export function calculateAllPlayerValues(
+  players: FullPlayerSummary[]
+): PlayerWithCalculatedMvpValue[] {
+  const sortedPlayers = players
+    .map((player) => {
       const mvpValue = calculatePlayerValue(player);
       return {
         ...player,
-        mvpValue
+        mvpValue,
       };
     })
     .sort((a, b) => b.mvpValue - a.mvpValue); // highest value first
 
+  const finalArray: PlayerWithCalculatedMvpValue[] = [];
+
   // 3. Assign calculatedRank
   sortedPlayers.forEach((player, index) => {
-    player.calculatedRank = index + 1;
+    finalArray.push({ ...player, calculatedRank: index + 1 });
   });
 
-  return sortedPlayers;
+  return finalArray;
 }
-

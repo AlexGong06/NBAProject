@@ -42,3 +42,9 @@ export interface PlayerMvpSummary {
   foulsPerGame: number;
   turnoversPerGame: number;
 }
+
+export interface PpgPlayerSummary {
+  player: string;
+  profileUrl: string;
+  pointsPerGame: number;
+}

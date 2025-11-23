@@ -15,7 +15,7 @@ export async function fetchAllPlayerStats(data: {
 
   const season = 2026; // replace with dynamic season if needed
   const advancedRowId = `advanced.${season}`;
-  const perGameRowId = `per_game_stats${season}`;
+  const perGameRowId = `per_game_stats.${season}`;
 
   // Per Game Stats scraping
   const perGameStats = await data.page.evaluate((rowId) => {
@@ -88,10 +88,8 @@ export async function fetchAllPlayerStats(data: {
 
   // Team Stats scraping
   const teamStats = await data.page.evaluate(() => {
-    const row = document.querySelector("tr.rowSum");
-
     const getTeamStat = (stat: string) => {
-      const cell = row.querySelector(`td[data-stat='${stat}']`);
+      const cell = document.querySelector(`td[data-stat='${stat}']`);
       if (!cell) return null;
       const raw = cell.textContent?.trim() || "";
       return raw === "" ? null : parseFloat(raw.replace("%", ""));

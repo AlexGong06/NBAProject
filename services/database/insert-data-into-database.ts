@@ -1,42 +1,33 @@
 import { MongoClient } from "mongodb";
+import { FullPlayerSummary } from "../utils/types";
 
-export async function saveToMongo(data: any[]) {
-  const uri = "put_connection_string_here";
+export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
+  const uri = "put_uri_here";
   const client = new MongoClient(uri);
 
   try {
-    // Connect to database
     await client.connect();
     console.log("✅ Connected to MongoDB");
 
     const db = client.db("NbaDb");
-    const collection = db.collection("DailyStatsLeaders");
+    const collection = db.collection("DailyMvpRankings");
 
-    // Compute date string for reference
     const date = new Date();
     const fullDate = `${
       date.getMonth() + 1
     }-${date.getDate()}-${date.getFullYear()}`;
 
-    // Iterate through each statistical category
-    for (const category of data) {
+    for (const player of data) {
       const document = {
         date: fullDate,
-        statistic: category.Subject, // e.g. 'Points', 'Assists', etc.
-        leaders: category.Players.map((p) => ({
-          rank: p.rank ?? p.Rank ?? null,
-          player: p.player ?? p.Player ?? null,
-          team: p.team ?? p.Team ?? null,
-          value: p.value ?? p.Value ?? null,
-        })),
+        ...player,
       };
 
-      // Insert the category record into MongoDB
       try {
-        const result = await collection.insertOne(document);
-        console.log(`📊 Inserted ${category.Subject} leaders for ${fullDate}`);
+        await collection.insertOne(document);
+        console.log(`📊 Inserted ${player.player} MVP row for ${fullDate}`);
       } catch (err) {
-        console.error(`❌ Error inserting ${category.Subject}:`, err);
+        console.error(`❌ Error inserting ${player.player}:`, err);
       }
     }
   } catch (err) {

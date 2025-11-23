@@ -12,7 +12,7 @@ import {
 
 function calculatePlayerValue(player: FullPlayerSummary): number {
   // ---- Level of Impact Components ----
-  console.log(`calculating mvp value for: ${player.player}`);
+  console.log(`calculating mvp value for ${player.player}`);
   const teamWinRatio =
     player.teamGamesPlayed > 0 ? player.teamWins / player.teamGamesPlayed : 0;
 

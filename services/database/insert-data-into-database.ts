@@ -1,8 +1,15 @@
 import { MongoClient } from "mongodb";
 import { FullPlayerSummary } from "../utils/types";
+import dotenv from "dotenv";
 
 export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
-  const uri = "put_uri_here";
+  dotenv.config();
+
+  const uri = process.env.MONGO_URI;
+
+  if (!uri) {
+    throw new Error("Missing MONGO_URI environment variable");
+  }
   const client = new MongoClient(uri);
 
   try {

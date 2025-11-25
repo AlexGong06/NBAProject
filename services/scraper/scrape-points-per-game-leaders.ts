@@ -16,21 +16,21 @@ export async function scrapePpgLeaders(data: {
     const container = document.querySelector("#leaders_pts_per_g");
     if (!container) return [];
 
-    const rows = Array.from(
-      container.querySelectorAll("table.columns tbody tr")
+    const rows = Array.from(container.querySelectorAll("div span.rank")).map(
+      (r) => r.parentElement
     );
 
     return rows
       .map((row) => {
-        // Player link lives inside td.who > a
-        const whoCell = row.querySelector("td.who a");
+        const whoCell = row.querySelector("span.who a");
+        // Player link lives inside span.who > a
         if (!whoCell) return null;
 
         const player = whoCell.textContent?.trim() ?? "";
         const profileUrl = whoCell.getAttribute("href") ?? "";
 
-        // Points per game lives inside td.value
-        const ppgCell = row.querySelector("td.value");
+        // Points per game lives inside span.value
+        const ppgCell = row.querySelector("span.value");
         const ppgRaw = ppgCell?.textContent?.trim() ?? "";
         const pointsPerGame = parseFloat(ppgRaw);
 

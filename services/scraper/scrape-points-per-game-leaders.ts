@@ -1,5 +1,8 @@
 import { Page } from "playwright";
-import { PpgPlayerSummary } from "../../utils/types";
+import {
+  PpgPlayerSummary,
+  PpgPlayerSummaryArraySchema,
+} from "../../utils/types";
 import { wait } from "../../utils/wait";
 import logger from "../../utils/logger";
 
@@ -52,7 +55,19 @@ export async function scrapePpgLeaders(data: {
     }[];
   });
   await wait(2000);
+
+  // Validate with Zod
+  const result = PpgPlayerSummaryArraySchema.safeParse(players);
+
+  if (!result.success) {
+    logger.error("PPG leader validation failed");
+    logger.error(result.error.format());
+    throw new Error("PPG leader validation failed");
+  }
+
   logger.info("displaying PPG leaders");
-  logger.info(players);
-  return players;
+  logger.info(result.data); // parsed / validated
+  await wait(2000);
+
+  return result.data; // strongly typed as PpgPlayerSummary[]
 }

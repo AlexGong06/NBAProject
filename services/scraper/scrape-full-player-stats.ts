@@ -1,6 +1,6 @@
 import { Page } from "playwright";
 import { wait } from "../../utils/wait";
-import { FullPlayerSummary } from "../../utils/types";
+import { FullPlayerSummary, FullPlayerSummarySchema } from "../../utils/types";
 import dotenv from "dotenv";
 import logger from "../../utils/logger";
 
@@ -104,11 +104,30 @@ export async function fetchAllPlayerStats(data: {
     };
   });
   // Return Full Player object with all necessary statistics to calculate MVP value
-  return {
+
+  // ------------------------------------
+  // Combine Raw Output
+  // ------------------------------------
+  const rawObject = {
     player: data.playerName,
     profileUrl: data.playerUrl,
     ...teamStats,
     ...perGameStats,
     ...advancedStats,
   };
+
+  // ------------------------------------
+  // Zod Validation
+  // ------------------------------------
+  const result = FullPlayerSummarySchema.safeParse(rawObject);
+
+  if (!result.success) {
+    logger.error(`Validation failed for player ${data.playerName}:`);
+    logger.error(result.error.format());
+    throw new Error(
+      `FullPlayerSummary validation failed for ${data.playerName}`
+    );
+  }
+
+  return result.data;
 }

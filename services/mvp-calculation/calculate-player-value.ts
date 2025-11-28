@@ -9,6 +9,7 @@ import logger from "../../utils/logger";
 import {
   FullPlayerSummary,
   PlayerWithCalculatedMvpValue,
+  PlayerWithCalculatedMvpValueSchema,
 } from "../../utils/types";
 
 function calculatePlayerValue(player: FullPlayerSummary): number {
@@ -69,7 +70,22 @@ export function calculateAllPlayerValues(
 
   // 3. Assign calculatedRank
   sortedPlayers.forEach((player, index) => {
-    finalArray.push({ ...player, calculatedRank: index + 1 });
+    const ranked = {
+      ...player,
+      calculatedRank: index + 1,
+    };
+
+    const validated = PlayerWithCalculatedMvpValueSchema.safeParse(ranked);
+
+    if (!validated.success) {
+      logger.error(`Output validation failed for player ${player.player}:`);
+      logger.error(validated.error.format());
+      throw new Error(
+        `Invalid PlayerWithCalculatedMvpValue for ${player.player}`
+      );
+    }
+
+    finalArray.push(validated.data);
   });
 
   return finalArray;

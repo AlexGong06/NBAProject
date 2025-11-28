@@ -1,19 +1,22 @@
 import { Page } from "playwright";
-import { wait } from "../utils/wait";
-import { FullPlayerSummary } from "../utils/types";
+import { wait } from "../../utils/wait";
+import { FullPlayerSummary } from "../../utils/types";
+import dotenv from "dotenv";
+import logger from "../../utils/logger";
 
 export async function fetchAllPlayerStats(data: {
   page: Page;
   playerUrl: string;
   playerName: string;
 }): Promise<FullPlayerSummary> {
+  dotenv.config();
   // Navigate to the player profile page
   await data.page.goto(data.playerUrl, { waitUntil: "domcontentloaded" });
 
   // Basketball Reference always exposes advanced stats inside #all_advanced
   // but the target row is simply identified by the ID pattern i.e "advanced.YYYY"
 
-  const season = 2026; // replace with dynamic season if needed
+  const season = process.env.NBA_SEASON; // replace with dynamic season if needed
   const advancedRowId = `advanced.${season}`;
   const perGameRowId = `per_game_stats.${season}`;
 
@@ -72,12 +75,11 @@ export async function fetchAllPlayerStats(data: {
   }, advancedRowId);
 
   if (!advancedStats || !perGameStats) {
-    console.warn(
+    logger.warn(
       `Could not find advanced/per game stats row for ${data.playerName}`
     );
   }
-  await wait(5000);
-  console.log(
+  logger.info(
     `navigating to team page to scrape team wins: ${perGameStats.team}`
   );
   await data.page.goto(

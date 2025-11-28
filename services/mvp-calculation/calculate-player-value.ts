@@ -5,14 +5,15 @@
 // Total Stats = (Points * True Shooting % * 1.5(Assists) + 1.2(Rebounds) + 3(Blocks) + 3(Steals) - Fouls - Turnovers) / 25
 // Link to the top 10 MVP candidates: https://www.basketball-reference.com/friv/mvp.html
 
+import logger from "../../utils/logger";
 import {
   FullPlayerSummary,
   PlayerWithCalculatedMvpValue,
-} from "../utils/types";
+} from "../../utils/types";
 
 function calculatePlayerValue(player: FullPlayerSummary): number {
   // ---- Level of Impact Components ----
-  console.log(`calculating mvp value for ${player.player}`);
+  logger.info(`calculating mvp value for ${player.player}`);
   const teamWinRatio =
     player.teamGamesPlayed > 0 ? player.teamWins / player.teamGamesPlayed : 0;
 
@@ -47,7 +48,7 @@ function calculatePlayerValue(player: FullPlayerSummary): number {
   // ---- Final Total Value ----
 
   const totalValue = 0.5 * winContribution + 0.5 * totalStats;
-  console.log(`mvp value: ${totalValue}`);
+  logger.info(`mvp value: ${totalValue}`);
   return totalValue;
 }
 

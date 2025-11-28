@@ -1,6 +1,7 @@
 import { MongoClient } from "mongodb";
-import { FullPlayerSummary } from "../utils/types";
+import { FullPlayerSummary } from "../../utils/types";
 import dotenv from "dotenv";
+import logger from "../../utils/logger";
 
 export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
   dotenv.config();
@@ -14,7 +15,7 @@ export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
 
   try {
     await client.connect();
-    console.log("✅ Connected to MongoDB");
+    logger.info("✅ Connected to MongoDB");
 
     const db = client.db("NbaDb");
     const collection = db.collection("DailyMvpRankings");
@@ -32,15 +33,15 @@ export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
 
       try {
         await collection.insertOne(document);
-        console.log(`📊 Inserted ${player.player} MVP row for ${fullDate}`);
+        logger.info(`📊 Inserted ${player.player} MVP row for ${fullDate}`);
       } catch (err) {
-        console.error(`❌ Error inserting ${player.player}:`, err);
+        logger.error(`❌ Error inserting ${player.player}:` + err);
       }
     }
   } catch (err) {
-    console.error("🚨 Error connecting to MongoDB:", err);
+    logger.error("🚨 Error connecting to MongoDB:" + err);
   } finally {
     await client.close();
-    console.log("🔒 MongoDB connection closed");
+    logger.info("🔒 MongoDB connection closed");
   }
 }

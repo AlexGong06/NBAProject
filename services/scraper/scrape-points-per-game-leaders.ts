@@ -1,6 +1,7 @@
 import { Page } from "playwright";
-import { PpgPlayerSummary } from "../utils/types";
-import { wait } from "../utils/wait";
+import { PpgPlayerSummary } from "../../utils/types";
+import { wait } from "../../utils/wait";
+import logger from "../../utils/logger";
 
 export async function scrapePpgLeaders(data: {
   page: Page;
@@ -51,7 +52,7 @@ export async function scrapePpgLeaders(data: {
     }[];
   });
   await wait(2000);
-  console.log("displaying PPG leaders");
-  console.dir(players, { depth: null });
+  logger.info("displaying PPG leaders");
+  logger.info(players);
   return players;
 }

@@ -41,4 +41,4 @@ jobs:
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           NBA_SEASON: ${{ secrets.NBA_SEASON }}
-        run: pnpm ts-node web-automation.ts
+        run: pnpm start

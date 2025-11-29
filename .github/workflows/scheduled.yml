@@ -1,0 +1,44 @@
+name: Daily MVP Rankings
+
+on:
+  schedule:
+    # Runs every day at 09:00 UTC
+    - cron: "0 9 * * *"
+  workflow_dispatch: {} # allows manual run from GitHub UI
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Pull your repository code onto the GitHub runner
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Install pnpm (official supported action)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9 # use the version you're using locally
+
+      # 3. Setup Node.js so pnpm knows which Node version to use
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm" # enable pnpm caching to speed up installs
+
+      # 4. Install dependencies using pnpm
+      - name: Install dependencies
+        run: pnpm install
+
+      # 5. Install Playwright browsers (needed for automation)
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
+      # 6. Run the actual script
+      - name: Run MVP rankings generator
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          NBA_SEASON: ${{ secrets.NBA_SEASON }}
+        run: pnpm ts-node web-automation.ts

@@ -3,7 +3,7 @@ name: Daily MVP Rankings
 on:
   schedule:
     # Runs every day at 09:00 UTC
-    - cron: "0 9 * * *"
+    - cron: "0 4 * * *"
   workflow_dispatch: {} # allows manual run from GitHub UI
 
 jobs:

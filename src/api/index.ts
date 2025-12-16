@@ -7,6 +7,7 @@ import cors from "cors";
 const app = express();
 logger.info("running server");
 app.use(express.json());
+app.use(cors());
 
 // register your router
 app.use("/daily-mvp-rankings", dailyRankingsRouter);

@@ -1,5 +1,5 @@
 import logger from "../../utils/logger";
-import { getDb } from "../database";
+import { getDb } from "../../database/database";
 import { Router } from "express";
 
 const playersRouter = Router();

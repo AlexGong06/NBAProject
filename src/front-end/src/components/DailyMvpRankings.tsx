@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PlayerSummaryFromDatabase } from "../../../utils/types";
+import PlayerRankingRow from "./PlayerRankingsRow"; // Adjust path if in same folder
 
 const API_BASE_URL = "http://localhost:3000";
 
@@ -19,8 +20,7 @@ export default function DailyMvpRankings() {
 
         const data: PlayerSummaryFromDatabase[] = await res.json();
 
-        // Since backend sorts by date desc,
-        // take the most recent date only
+        // Since backend sorts by date desc, take the most recent date only
         const latestDate = data[0]?.date;
 
         const latestRankings = data
@@ -29,7 +29,9 @@ export default function DailyMvpRankings() {
 
         setRankings(latestRankings);
       } catch (err) {
-        setError("Unable to load MVP rankings" + err);
+        // Safe error handling
+        const msg = err instanceof Error ? err.message : String(err);
+        setError("Unable to load MVP rankings: " + msg);
       } finally {
         setLoading(false);
       }
@@ -39,14 +41,17 @@ export default function DailyMvpRankings() {
   }, []);
 
   if (loading) return <p>Loading MVP rankings…</p>;
-  if (error) return <p>{error}</p>;
+  if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   return (
-    <div>
+    <div style={{ maxWidth: "800px", margin: "0 auto" }}>
       <h2>Daily MVP Rankings</h2>
-      <ol>
+      <ol style={{ padding: 0 }}>
         {rankings.map((player) => (
-          <li>{player.player}</li>
+          <PlayerRankingRow
+            key={`${player.player}-${player.date}`}
+            player={player}
+          />
         ))}
       </ol>
     </div>

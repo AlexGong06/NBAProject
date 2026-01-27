@@ -1,0 +1,113 @@
+.card {
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 15px;
+  list-style: none;
+  background-color: #ffffff;
+  /* Force dark text for the card regardless of global dark mode */
+  color: #213547;
+  text-align: left;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.infoGroup {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.rank {
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.playerName {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0070f3;
+  text-decoration: none;
+}
+
+.teamInfo {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* The Dropdown Button Fix */
+.toggleBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: #333 !important; /* Forces arrow to be dark */
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  min-width: 24px;
+}
+
+.expanded {
+  transform: rotate(180deg);
+}
+
+.details {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 20px;
+}
+
+.avatarPlaceholder {
+  width: 80px;
+  height: 80px;
+  background-color: #f0f0f0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.statItem strong {
+  color: #000;
+}
+
+.avatarContainer {
+  width: 80px;
+  height: 80px;
+  background-color: #f0f0f0;
+  border-radius: 50%;
+  overflow: hidden; /* Ensures image stays circular */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid #eee;
+}
+
+.playerImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Prevents stretching */
+}

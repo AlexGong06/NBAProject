@@ -1,42 +1,79 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+/* ── Overall layout ─────────────────────────────────────────────────────── */
+
+/* app-container wraps the whole page (header + content).
+   Using flex-direction: column stacks the header on top of the main area. */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Header / navigation bar ─────────────────────────────────────────────── */
+
+.app-header {
+  background-color: #1a1a2e; /* dark navy — stands out from the page background */
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  /* Keep the header sticky at the top as the user scrolls */
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* ── Tab navigation ──────────────────────────────────────────────────────── */
+
+.tab-nav {
+  display: flex;
+  gap: 4px;
+}
+
+/* Each .tab is a NavLink styled to look like a pill-shaped button.
+   NavLink renders an <a> tag under the hood, so we reset link styles here. */
+.tab {
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 8px 18px;
+  border-radius: 20px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tab:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* tab--active is added automatically by NavLink when its route matches the URL */
+.tab--active {
+  background-color: #0070f3; /* bright blue for the selected tab */
+  color: #ffffff;
+}
+
+/* ── Main content area ───────────────────────────────────────────────────── */
+
+.app-main {
+  flex: 1; /* grows to fill remaining vertical space below the header */
+  padding: 24px 16px;
+}
+
+/* ── Placeholder message (e.g. /player with no player selected) ──────────── */
+
+.placeholder-message {
+  max-width: 600px;
+  margin: 80px auto;
   text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1rem;
 }

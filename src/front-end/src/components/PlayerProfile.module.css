@@ -1,0 +1,253 @@
+/* ── Page container ──────────────────────────────────────────────────────── */
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+/* ── Back button ─────────────────────────────────────────────────────────── */
+
+.backButton {
+  background: none;
+  border: none;
+  color: #0070f3;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-family: inherit;
+  padding: 8px 0;
+  margin-bottom: 20px;
+  display: inline-block;
+}
+
+.backButton:hover {
+  text-decoration: underline;
+  border-color: transparent;
+}
+
+/* ── Hero section: large image + name + rank ─────────────────────────────── */
+
+.heroSection {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  color: #213547; /* force dark text inside these white cards */
+}
+
+.heroImage {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #0070f3;
+  flex-shrink: 0;
+}
+
+.heroInfo {
+  flex: 1;
+}
+
+.playerName {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: #111;
+}
+
+.teamInfo {
+  color: #666;
+  font-size: 0.95rem;
+  margin: 0 0 14px;
+}
+
+/* Rank badge — a small highlighted box showing #1, #2, etc. */
+.rankBadge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #f0f7ff;
+  border: 1px solid #b3d4ff;
+  border-radius: 8px;
+  padding: 8px 16px;
+}
+
+.rankLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0050cc;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.rankValue {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #0070f3;
+  line-height: 1.2;
+}
+
+/* ── Card sections (stats, chart, placeholders) ──────────────────────────── */
+
+.section {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  color: #213547;
+}
+
+/* sectionHeader is used in sections that have both a title and controls
+   (like Ranking History + the time range buttons) side-by-side */
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #111;
+  margin: 0 0 16px;
+}
+
+/* When inside sectionHeader, don't add bottom margin (sectionHeader handles gap) */
+.sectionHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+/* ── Stats grid ──────────────────────────────────────────────────────────── */
+
+.statsGrid {
+  display: grid;
+  /* auto-fill creates as many columns as will fit; each at least 90px wide */
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
+}
+
+/* Each stat card: label on top, value below */
+.statItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.statItem strong {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.statItem span {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #111;
+}
+
+/* ── Time range selector ─────────────────────────────────────────────────── */
+
+.rangeSelector {
+  display: flex;
+  gap: 6px;
+}
+
+.rangeBtn {
+  padding: 4px 12px;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #555;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.rangeBtn:hover {
+  border-color: #0070f3;
+  color: #0070f3;
+}
+
+/* Active state — filled blue pill */
+.rangeBtnActive {
+  background: #0070f3;
+  border-color: #0070f3;
+  color: #ffffff;
+}
+
+.noChartData {
+  color: #888;
+  text-align: center;
+  padding: 48px 0;
+  font-size: 0.9rem;
+}
+
+/* ── Placeholder sections (upcoming games, tickets) ──────────────────────── */
+
+.placeholder {
+  background: #f5f5f5;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #888;
+}
+
+.placeholder p {
+  margin: 0 0 4px;
+  font-weight: 600;
+  color: #555;
+}
+
+.placeholderSub {
+  font-size: 0.85rem;
+  font-weight: 400 !important;
+  color: #999 !important;
+}
+
+/* ── State feedback messages ─────────────────────────────────────────────── */
+
+.message {
+  max-width: 800px;
+  margin: 60px auto;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.messageError {
+  max-width: 800px;
+  margin: 60px auto;
+  text-align: center;
+  color: #ff6b6b;
+}
+
+/* ── Responsive: stack hero vertically on small screens ──────────────────── */
+
+@media (max-width: 480px) {
+  .heroSection {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+
+  .rankBadge {
+    align-items: center;
+  }
+}

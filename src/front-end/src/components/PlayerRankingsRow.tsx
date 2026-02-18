@@ -1,4 +1,7 @@
 import { useState } from "react";
+// useNavigate is a React Router hook that gives us a function to
+// programmatically change the URL (navigate to a different page).
+import { useNavigate } from "react-router-dom";
 import type { PlayerSummaryFromDatabase } from "../../../utils/types";
 import styles from "./PlayerRankingsRow.module.css";
 
@@ -9,22 +12,42 @@ interface PlayerRankingRowProps {
 export default function PlayerRankingRow({ player }: PlayerRankingRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // 1. Extract Player ID from profileUrl
-  // Example: https://www.basketball-reference.com/players/g/gilgesh01.html -> gilgesh01
+  // navigate is a function we call like: navigate("/some/path")
+  // It changes the URL and React Router swaps the rendered component.
+  const navigate = useNavigate();
+
+  // Extract the player's ID from their profile URL.
+  // profileUrl looks like: "https://www.basketball-reference.com/players/g/gilgesh01.html"
+  // .split("/").pop() gives us "gilgesh01.html", then we strip the extension.
   const playerId =
     player.profileUrl.split("/").pop()?.replace(".html", "") || "";
 
-  // 2. Construct the Image URL using the Basketball-Reference pattern
+  // Basketball-Reference serves headshots at a predictable URL pattern.
   const imageUrl = `https://www.basketball-reference.com/req/202106291/images/headshots/${playerId}.jpg`;
 
   const fmtPct = (val: number) => `${(val * 100).toFixed(1)}%`;
   const fmtNum = (val: number) => val.toFixed(1);
 
+  // Called when the user clicks the player's avatar image.
+  // We navigate to the player's dedicated profile page.
+  // encodeURIComponent turns spaces and special characters into URL-safe codes
+  // e.g. "LeBron James" → "LeBron%20James"
+  const handleImageClick = (e: React.MouseEvent) => {
+    // stopPropagation prevents this click from also toggling the expand/collapse,
+    // since the image sits inside the clickable details panel.
+    e.stopPropagation();
+    navigate(`/player/${encodeURIComponent(player.player)}`);
+  };
+
   return (
     <li className={styles.card}>
+      {/* ── Collapsed header row — always visible ────────────────────── */}
       <div className={styles.header} onClick={() => setIsExpanded(!isExpanded)}>
         <div className={styles.infoGroup}>
           <span className={styles.rank}>#{player.calculatedRank}</span>
+
+          {/* External link to basketball-reference.com player page.
+              stopPropagation so clicking the link doesn't also toggle expand. */}
           <a
             href={player.profileUrl}
             target="_blank"
@@ -34,10 +57,13 @@ export default function PlayerRankingRow({ player }: PlayerRankingRowProps) {
           >
             {player.player}
           </a>
+
           <span className={styles.teamInfo}>
             ({player.team} • {player.teamWins} Wins)
           </span>
         </div>
+
+        {/* Chevron button that rotates 180° when expanded */}
         <button
           className={`${styles.toggleBtn} ${isExpanded ? styles.expanded : ""}`}
         >
@@ -45,20 +71,33 @@ export default function PlayerRankingRow({ player }: PlayerRankingRowProps) {
         </button>
       </div>
 
+      {/* ── Expanded details panel ────────────────────────────────────── */}
       {isExpanded && (
         <div className={styles.details}>
-          {/* 3. Updated Image Tag */}
-          <div className={styles.avatarContainer}>
+          {/* Avatar with hover overlay.
+              When the user hovers, a semi-transparent overlay appears with
+              "View Profile" text. Clicking navigates to the player's page. */}
+          <div
+            className={styles.avatarContainer}
+            onClick={handleImageClick}
+            title="Click to view player profile"
+          >
             <img
               src={imageUrl}
               alt={player.player}
               className={styles.playerImage}
-              // Handle cases where an image might not exist
               onError={(e) => {
+                // If basketball-reference doesn't have a photo, show a placeholder
                 (e.target as HTMLImageElement).src =
-                  "https://via.placeholder.com/80?text=No+Photo";
+                  "https://placehold.co/80x80?text=N/A";
               }}
             />
+
+            {/* Overlay div — hidden by default, slides in on hover via CSS.
+                It uses position:absolute over the image (see CSS for details). */}
+            <div className={styles.imageOverlay}>
+              <span className={styles.overlayText}>View Profile</span>
+            </div>
           </div>
 
           <div style={{ flex: 1 }}>

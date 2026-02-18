@@ -5,7 +5,7 @@
   padding: 15px;
   list-style: none;
   background-color: #ffffff;
-  /* Force dark text for the card regardless of global dark mode */
+  /* Force dark text so the card is always readable even in dark mode */
   color: #213547;
   text-align: left;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -41,13 +41,12 @@
   font-size: 0.9rem;
 }
 
-/* The Dropdown Button Fix */
 .toggleBtn {
   background: none;
   border: none;
   cursor: pointer;
   font-size: 1rem;
-  color: #333 !important; /* Forces arrow to be dark */
+  color: #333 !important;
   padding: 5px;
   display: flex;
   align-items: center;
@@ -56,6 +55,7 @@
   min-width: 24px;
 }
 
+/* Rotate the chevron when the row is expanded */
 .expanded {
   transform: rotate(180deg);
 }
@@ -66,19 +66,6 @@
   border-top: 1px solid #eee;
   display: flex;
   gap: 20px;
-}
-
-.avatarPlaceholder {
-  width: 80px;
-  height: 80px;
-  background-color: #f0f0f0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  color: #888;
-  flex-shrink: 0;
 }
 
 .statsGrid {
@@ -93,21 +80,67 @@
   color: #000;
 }
 
+/* ── Avatar / player image with hover overlay ────────────────────────────── */
+
 .avatarContainer {
   width: 80px;
   height: 80px;
   background-color: #f0f0f0;
   border-radius: 50%;
-  overflow: hidden; /* Ensures image stays circular */
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   border: 2px solid #eee;
+
+  /* position:relative is required so that the overlay (position:absolute)
+     is positioned relative to this container, not the whole page */
+  position: relative;
+  cursor: pointer;
 }
 
 .playerImage {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Prevents stretching */
+  object-fit: cover;
+}
+
+/* The overlay sits on top of the image.
+   By default it is fully transparent (opacity: 0) and invisible.
+   When the parent is hovered, we transition it to fully visible.
+   Using opacity + transition gives a smooth fade-in effect. */
+.imageOverlay {
+  /* Fill the entire avatarContainer */
+  position: absolute;
+  inset: 0; /* shorthand for top:0 right:0 bottom:0 left:0 */
+
+  /* Semi-transparent dark background */
+  background-color: rgba(0, 0, 0, 0.65);
+
+  /* Center the text inside the overlay */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /* Start invisible; transition fades it in on hover */
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* When the user hovers over the avatarContainer, make the overlay visible */
+.avatarContainer:hover .imageOverlay {
+  opacity: 1;
+}
+
+.overlayText {
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* Keep the text within the circle */
+  padding: 0 6px;
+  line-height: 1.3;
 }

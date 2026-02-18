@@ -35,7 +35,15 @@ export async function fetchAllPlayerStats(data: {
     const getTeam = (team: string) => {
       const cell = row.querySelector(`td[data-stat='${team}']`);
       if (!cell) return null;
-      const raw = cell.textContent?.trim() || "";
+      let raw = cell.textContent?.trim() || "";
+      // Handle case where a player has 2 teams during season (traded)
+      if (raw === "2TM") {
+        const newTeam =
+          document
+            .querySelector(`td[data-stat='team_name_abbr']`)
+            .textContent?.trim() || "";
+        raw = newTeam;
+      }
       return raw === "" ? null : raw.replace("%", "");
     };
 
@@ -76,15 +84,15 @@ export async function fetchAllPlayerStats(data: {
 
   if (!advancedStats || !perGameStats) {
     logger.warn(
-      `Could not find advanced/per game stats row for ${data.playerName}`
+      `Could not find advanced/per game stats row for ${data.playerName}`,
     );
   }
   logger.info(
-    `navigating to team page to scrape team wins: ${perGameStats.team}`
+    `navigating to team page to scrape team wins: ${perGameStats.team}`,
   );
   await data.page.goto(
     `https://www.basketball-reference.com/teams/${perGameStats.team}/${season}.html`,
-    { waitUntil: "domcontentloaded" }
+    { waitUntil: "domcontentloaded" },
   );
   await wait(2000);
 
@@ -125,7 +133,7 @@ export async function fetchAllPlayerStats(data: {
     logger.error(`Validation failed for player ${data.playerName}:`);
     logger.error(result.error.format());
     throw new Error(
-      `FullPlayerSummary validation failed for ${data.playerName}`
+      `FullPlayerSummary validation failed for ${data.playerName}`,
     );
   }
 

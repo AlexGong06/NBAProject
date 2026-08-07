@@ -1,0 +1,5 @@
+# esbuild ships a platform-specific binary that vitest needs, so its install
+# script has to be allowed to run. pnpm 11 reads build approvals from here
+# rather than from package.json.
+allowBuilds:
+  esbuild: true

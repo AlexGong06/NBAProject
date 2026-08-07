@@ -12,7 +12,9 @@ import {
   PlayerWithCalculatedMvpValueSchema,
 } from "../../utils/types";
 
-function calculatePlayerValue(player: FullPlayerSummary): number {
+// Exported for tests: the scoring rule is the product this repo exists to
+// produce, and it should be assertable without going through ranking.
+export function calculatePlayerValue(player: FullPlayerSummary): number {
   // ---- Level of Impact Components ----
   logger.info(`calculating mvp value for ${player.player}`);
   const teamWinRatio =

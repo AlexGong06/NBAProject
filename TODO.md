@@ -7,12 +7,41 @@ README for how to run it.
 
 What's left, roughly in the order it should happen.
 
+Run the tests with `pnpm test` from the project root.
+
 ## Correctness
 
-- **No test suite.** Start with `calculate-player-value.ts` — it's a pure
-  function with known inputs, and it's the heart of the project. Then a test
-  that a date with no scrape surfaces as missing rather than as zero
-  candidates.
+- **Tests: two of four tiers done.** `pnpm test` covers the scoring formula and
+  the date key. Still missing:
+  - The scraper, run against saved Basketball Reference HTML rather than the
+    network. Needs the `page.evaluate` callbacks in
+    `scrape-full-player-stats.ts` extracted into pure functions over a
+    `Document` first, then `jsdom`. Highest-value case: a traded player, since
+    the "2TM" fix has nothing pinning it.
+  - The API routes. `getDb()` is a module singleton, so routes can't be tested
+    without a live Mongo — inject the db, then `supertest` the 404-on-missing-date
+    behaviour the whole front end is built around.
+- **The header comment on the scoring formula is wrong.**
+  `calculate-player-value.ts:5` writes Total Stats as
+  `Points * True Shooting % * 1.5(Assists) + ...` — a multiplication where the
+  code has a plus. The code is right and is now pinned by a test; the comment
+  needs correcting.
+- **Dead null-guards.** `calculate-player-value.ts:23,30-31` check for null on
+  `usageRate`, `valueOverReplacement`, `winShare` and `boxPlusMinus`, but
+  `types.ts` declares all four as non-nullable `z.number()` and the scraper
+  validates before returning. Either the schema should be `.nullable()` or the
+  guards should go.
+- **The scraper's own recovery path crashes.**
+  `scrape-full-player-stats.ts:85` logs a warning when a player has no per-game
+  row, then line 91 reads `perGameStats.team` unconditionally. The warning is
+  immediately followed by a TypeError.
+- **Reruns duplicate rows.** `insert-data-into-database.ts` does a bare
+  `insertOne` per player with no unique key on `(date, player)`. Running the
+  scraper twice in a day stores every player twice.
+- **Partial days look complete.** The same file catches a failed insert, logs
+  it, and continues. Five of eight players stored means the API returns 200
+  with a ranking that is quietly wrong — worse than a missing day, because
+  there is no signal at all.
 - **The scoring formula exists twice.** `src/services/mvp-calculation/calculate-player-value.ts`
   and `breakdown()` in `src/front-end/src/data/fixture.ts` are hand copies of
   each other. Change one and the "How it works" panel starts showing a formula

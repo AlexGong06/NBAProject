@@ -64,6 +64,17 @@ Known limits: Total Stats dominates the sum for high-usage scorers, team record
 is a season ratio rather than a rolling window, and days the collector fails are
 left as gaps.
 
+## Tests
+
+```bash
+pnpm install
+pnpm test
+```
+
+No database or network needed. They cover the scoring formula and the
+`"M-D-YYYY"` date key — the two pieces where a wrong answer still looks like a
+right answer. Each test says in a comment what failure it guards against.
+
 ## Backend
 
 The scraper, API and database run separately from the front end.

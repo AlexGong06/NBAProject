@@ -2,6 +2,7 @@ import { MongoClient } from "mongodb";
 import { FullPlayerSummary } from "../../utils/types";
 import dotenv from "dotenv";
 import logger from "../../utils/logger";
+import { toDateKey } from "../../utils/date-key";
 
 export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
   dotenv.config();
@@ -20,10 +21,7 @@ export async function saveDailyMvpRankingToMongo(data: FullPlayerSummary[]) {
     const db = client.db("NbaDb");
     const collection = db.collection("DailyMvpRankings");
 
-    const date = new Date();
-    const fullDate = `${
-      date.getMonth() + 1
-    }-${date.getDate()}-${date.getFullYear()}`;
+    const fullDate = toDateKey(new Date());
 
     for (const player of data) {
       const document = {

@@ -1,23 +1,47 @@
-# TODO OVERVIEW
+# TODO
 
-The current state of the app can be found inside the [Screenshots](.claude/screenshots/front-end-example.png) folder. This is going to be the "homepage" of my application, or whatever the user sees first when they navigate to the app after I've deployed it. The app will have multiple pages: The homepage where it will display the current day's MVP rankings, as well as an option to search different dates and see the rankings on that day as well. The second "page" will be for specific players. Here, we should be able to see player specific info, such as rankings over time, seeing the next 10 teams that player will play against, the player's current MVP ranking, links to buy tickets to see them in person, etc.
+The front-end work this file used to describe is done: the rankings page with
+date search, the player view with an adjustable rank-over-time chart, the
+next-10-games and ticket placeholders, and the missing-day handling. See the
+README for how to run it.
 
-# FRONT END TASKS
+What's left, roughly in the order it should happen.
 
-- Update the homepage to include the abililty to search for a specefic date, and display the rankings on that day.
+## Correctness
 
-- Additionaly, add another tab at the top that when clicked, switches the app to the player view.
+- **No test suite.** Start with `calculate-player-value.ts` — it's a pure
+  function with known inputs, and it's the heart of the project. Then a test
+  that a date with no scrape surfaces as missing rather than as zero
+  candidates.
+- **The scoring formula exists twice.** `src/services/mvp-calculation/calculate-player-value.ts`
+  and `breakdown()` in `src/front-end/src/data/fixture.ts` are hand copies of
+  each other. Change one and the "How it works" panel starts showing a formula
+  the backend no longer uses. Extract to a module both import.
+- **Collector failures are still unfixed.** The app now reports the gaps
+  honestly, but the scraper still drops days. Find out why before adding
+  anything else.
 
-- On the player view, we should have the player profile, their stats, their MVP ranking as of today, as well as a graph to show their MVP ranking over time. This graph should be a line graph. This time range should be adjustable, with the maximum range being one month.
+## Packaging
 
-- Add some placeholders for the extra features like the next 10 teams the player will play against, and links to buy tickets for those games.
+- `pnpm demo` at the root that runs the front end in fixture mode, so a fresh
+  clone is one command.
+- Root `package.json` lists `react` and `vite` as backend dependencies. They
+  belong to `src/front-end/`.
 
-- if we click a player profile picture in the dropdown on the home page, we should redirect to that player's page on the other view. As a little front end feature, when a user hovers their mouse over the player profile picture, there should transition to an overlay over the picture with something like "click to view player profile"
+## Backend gaps
 
-# BACK END TASKS
+- The schedule and ticket links on the player view are fixture-only. There is
+  no route behind them. Either add one or keep them clearly marked as
+  placeholders.
+- No route serves a single player's full stat line; the profile view currently
+  derives everything from the rankings payload.
 
-- create the neccessary routes to obtain all the information in the front end. Try to follow similar structure to how the current routes are being written in the [routes](src/api/routes).
+## Data source
 
-- if new types are required to be created, create them in the [types](src/utils/types.ts) file.
-
-- there are currently some gaps in the database where there is no info on days where the web scrapping portion failed. Make sure to handle the case where the specified date has no data. We will fix the automation in a separate task.
+- Investigate pulling stats from an API instead of scraping. Blocker to check
+  first: the formula needs VORP, Win Shares, BPM, USG% and TS%, which
+  Basketball Reference computes rather than reports. Most free NBA APIs serve
+  raw box scores only. If that holds, an API can supplement the scraper but
+  can't replace it.
+- If both sources end up in play, put them behind one interface the way
+  `DataSource` works on the front end, rather than branching at the call site.

@@ -32,6 +32,13 @@ export async function fetchAllPlayerStats(data: {
       return raw === "" ? null : parseFloat(raw.replace("%", ""));
     };
 
+    const getText = (stat: string) => {
+      const cell = row.querySelector(`td[data-stat='${stat}']`);
+      if (!cell) return null;
+      const raw = cell.textContent?.trim() || "";
+      return raw === "" ? null : raw;
+    };
+
     const getTeam = (team: string) => {
       const cell = row.querySelector(`td[data-stat='${team}']`);
       if (!cell) return null;
@@ -57,6 +64,14 @@ export async function fetchAllPlayerStats(data: {
       foulsPerGame: getPerGameStat("pf_per_g"),
       turnoversPerGame: getPerGameStat("tov_per_g"),
       gamesStarted: getPerGameStat("games_started"),
+      // Games the player actually appeared in, as of today. The season row is
+      // cumulative, so a scrape on any given day reports that day's total --
+      // which is exactly the availability figure the MVP formula needs. No
+      // game-log lookup required for the daily pipeline.
+      gamesPlayed: getPerGameStat("games"),
+      // Position is a letter code (C, PG, SF), so it reads as text.
+      pos: getText("pos"),
+      age: getPerGameStat("age"),
       team: getTeam("team_name_abbr"),
     };
   }, perGameRowId);
@@ -108,6 +123,7 @@ export async function fetchAllPlayerStats(data: {
     const teamLoses = getTeamStat("losses");
     return {
       teamWins,
+      teamLosses: teamLoses,
       teamGamesPlayed: teamLoses + teamWins,
     };
   });

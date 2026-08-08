@@ -43,6 +43,13 @@ export default function FormulaPanel({ D, player, onClose }: Props) {
       expr: "(PTS × TS% + 1.5 AST + 1.2 REB + 3 BLK + 3 STL − PF − TOV) / 25",
       substituted: `(${player.pointsPerGame.toFixed(1)} × ${player.trueShootingPercentage.toFixed(3)} + 1.5(${player.assistsPerGame.toFixed(1)}) + 1.2(${player.reboundsPerGame.toFixed(1)}) + 3(${player.blocksPerGame.toFixed(1)}) + 3(${player.stealsPerGame.toFixed(1)}) − ${player.foulsPerGame.toFixed(1)} − ${player.turnoversPerGame.toFixed(1)}) / 25`,
     },
+    {
+      id: 5,
+      label: "Availability",
+      value: fmt(b.availability),
+      expr: "games played / team games",
+      substituted: `${player.gamesPlayed} / ${player.teamGamesPlayed}  —  missed ${player.teamGamesPlayed - player.gamesPlayed}`,
+    },
   ];
 
   const mono: React.CSSProperties = {
@@ -119,8 +126,13 @@ export default function FormulaPanel({ D, player, onClose }: Props) {
             </div>
           </div>
           <div style={{ ...mono, color: C.textMuted, marginTop: 8 }}>
-            {`0.5 × ${fmt(b.winContribution)}  +  0.5 × ${fmt(b.totalStats)}`}
+            {`${fmt(b.availability)} × (0.5 × ${fmt(b.winContribution)}  +  0.5 × ${fmt(b.totalStats)})`}
           </div>
+          {b.availability < 1 && (
+            <div style={{ ...mono, color: C.textFaint, marginTop: 6 }}>
+              {`${fmt(b.rawValue)} at full availability — ${player.teamGamesPlayed - player.gamesPlayed} missed games cost ${fmt(b.rawValue - b.mvpValue)}`}
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${C.line}` }}>

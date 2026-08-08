@@ -41,9 +41,19 @@ function sortKey(dateKey: string): number {
 export async function loadApiSource(): Promise<DataSource> {
   const res = await fetch(`${API_BASE}/daily-mvp-rankings`);
   if (!res.ok) throw new Error(`GET /daily-mvp-rankings failed: ${res.status}`);
-  const records: (PlayerStats & { date: string; calculatedRank?: number })[] = await res.json();
+  const raw: (Partial<PlayerStats> & { date: string; calculatedRank?: number })[] =
+    await res.json();
 
-  if (!records.length) throw new Error("API returned no ranking records");
+  if (!raw.length) throw new Error("API returned no ranking records");
+
+  // Rows written before formula version 2 have no gamesPlayed. Reading them as
+  // fully available reproduces exactly what version 1 computed, which is what
+  // those rows' stored mvpValue already reflects. Without this the field is
+  // undefined, availability is NaN, and every historical score renders as NaN.
+  const records = raw.map((r) => ({
+    ...r,
+    gamesPlayed: r.gamesPlayed ?? r.teamGamesPlayed,
+  })) as (PlayerStats & { date: string; calculatedRank?: number })[];
 
   // Group by date.
   const byDate = new Map<string, typeof records>();

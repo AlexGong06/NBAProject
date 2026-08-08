@@ -2,10 +2,16 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    // Backend only. src/front-end is a separate package with its own Vite
-    // config; running its tests from here would use the wrong environment.
+    // Backend, plus the front end's data layer.
+    //
+    // src/front-end is otherwise a separate package with its own Vite config,
+    // and its components are not tested from here. The fixture is the
+    // exception: it hand-copies the backend's scoring formula, so the two have
+    // to be comparable in one process to assert they still agree. Everything
+    // under src/front-end/src/data is plain TypeScript with no DOM or
+    // import.meta, so it loads fine in this environment.
     include: ["src/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "src/front-end/**"],
+    exclude: ["**/node_modules/**", "src/front-end/src/components/**"],
     // Node, not jsdom — nothing under test touches a DOM yet. The scraper
     // tests will need jsdom when the page.evaluate callbacks are extracted.
     environment: "node",

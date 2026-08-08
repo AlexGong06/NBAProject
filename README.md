@@ -46,7 +46,9 @@ default so a fresh clone works immediately.
 ## The score
 
 ```
-Total Value = 0.5 (Win Contribution) + 0.5 (Total Stats)
+Total Value = availability × (0.5 Win Contribution + 0.5 Total Stats)
+
+availability = games played / team games played
 
 Win Contribution = level of impact × quality of impact
   level of impact   = (wins / games) × (MPG / 48) × (USG% / 100)
@@ -56,13 +58,27 @@ Total Stats = (PTS × TS% + 1.5 AST + 1.2 REB + 3 BLK + 3 STL − PF − TOV) / 
 ```
 
 Half the score is what a player does for winning basketball; half is raw
-production, efficiency-weighted. Implemented in
-`src/services/mvp-calculation/calculate-player-value.ts`, and mirrored in the
-front end's fixture module so the UI can show the working.
+production, efficiency-weighted. The whole thing is then scaled by how much of
+the season the player was actually there for.
 
-Known limits: Total Stats dominates the sum for high-usage scorers, team record
-is a season ratio rather than a rolling window, and days the collector fails are
-left as gaps.
+That last factor is the part worth explaining. Every other term is a rate, so
+without it a player who appeared in 25 games looked identical to one who
+appeared in 55 — he scored 84.5% of an ever-present peer while playing 45% of
+the games. Availability multiplies the total rather than sitting inside the win
+half, because the win half is the smaller one and leaving Total Stats untouched
+made the penalty milder than simply pro-rating. Absence is now penalised twice:
+VORP and Win Shares are cumulative and stop accruing while a player sits, and
+availability scales the result on top of that. The same player now scores 38%.
+
+Implemented in `src/services/mvp-calculation/calculate-player-value.ts`, and
+mirrored in the front end's fixture module so the UI can show the working.
+Stored rows carry a `formulaVersion`; rows without one predate this change and
+are version 1, so scores either side of it are not directly comparable.
+
+Known limits: team record is a season ratio rather than a rolling window,
+Win Shares and VORP are the only league-context stats and they arrive
+pre-computed from Basketball Reference, and days the collector fails are left
+as gaps.
 
 ## Tests
 

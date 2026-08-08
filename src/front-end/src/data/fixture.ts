@@ -28,18 +28,20 @@ export const TEAMS: Record<string, string> = {
 };
 
 export const PLAYERS: PlayerStats[] = [
-  { player: "Nikola Jokić", team: "DEN", pos: "C", age: 30, teamWins: 38, teamLosses: 17, teamGamesPlayed: 55, gamesStarted: 54, minutesPerGame: 36.1, pointsPerGame: 29.4, assistsPerGame: 10.8, reboundsPerGame: 12.6, blocksPerGame: 0.7, stealsPerGame: 1.8, foulsPerGame: 2.3, turnoversPerGame: 3.5, usageRate: 30.1, valueOverReplacement: 6.4, winShare: 10.2, boxPlusMinus: 12.8, trueShootingPercentage: 0.662 },
-  { player: "Shai Gilgeous-Alexander", team: "OKC", pos: "G", age: 27, teamWins: 47, teamLosses: 8, teamGamesPlayed: 55, gamesStarted: 55, minutesPerGame: 34.2, pointsPerGame: 32.6, assistsPerGame: 6.3, reboundsPerGame: 5.1, blocksPerGame: 1.0, stealsPerGame: 1.7, foulsPerGame: 2.1, turnoversPerGame: 2.4, usageRate: 33.8, valueOverReplacement: 5.9, winShare: 11.4, boxPlusMinus: 10.1, trueShootingPercentage: 0.639 },
-  { player: "Luka Dončić", team: "LAL", pos: "G", age: 26, teamWins: 34, teamLosses: 18, teamGamesPlayed: 52, gamesStarted: 52, minutesPerGame: 36.8, pointsPerGame: 33.1, assistsPerGame: 8.9, reboundsPerGame: 8.4, blocksPerGame: 0.5, stealsPerGame: 1.6, foulsPerGame: 2.4, turnoversPerGame: 4.1, usageRate: 34.9, valueOverReplacement: 5.1, winShare: 8.2, boxPlusMinus: 9.4, trueShootingPercentage: 0.607 },
-  { player: "Victor Wembanyama", team: "SAS", pos: "C", age: 22, teamWins: 32, teamLosses: 16, teamGamesPlayed: 48, gamesStarted: 48, minutesPerGame: 33.2, pointsPerGame: 26.1, assistsPerGame: 4.2, reboundsPerGame: 11.4, blocksPerGame: 3.7, stealsPerGame: 1.2, foulsPerGame: 2.9, turnoversPerGame: 3.4, usageRate: 30.6, valueOverReplacement: 5.4, winShare: 8.0, boxPlusMinus: 10.6, trueShootingPercentage: 0.606 },
-  { player: "Giannis Antetokounmpo", team: "MIL", pos: "F", age: 31, teamWins: 31, teamLosses: 23, teamGamesPlayed: 54, gamesStarted: 53, minutesPerGame: 34.0, pointsPerGame: 31.2, assistsPerGame: 6.5, reboundsPerGame: 11.9, blocksPerGame: 1.2, stealsPerGame: 0.9, foulsPerGame: 2.7, turnoversPerGame: 3.3, usageRate: 33.1, valueOverReplacement: 4.6, winShare: 8.9, boxPlusMinus: 9.0, trueShootingPercentage: 0.618 },
-  { player: "Jayson Tatum", team: "BOS", pos: "F", age: 27, teamWins: 36, teamLosses: 19, teamGamesPlayed: 55, gamesStarted: 55, minutesPerGame: 35.4, pointsPerGame: 27.3, assistsPerGame: 5.4, reboundsPerGame: 8.6, blocksPerGame: 0.6, stealsPerGame: 1.1, foulsPerGame: 2.2, turnoversPerGame: 2.8, usageRate: 29.4, valueOverReplacement: 4.2, winShare: 8.4, boxPlusMinus: 7.6, trueShootingPercentage: 0.601 },
-  { player: "Donovan Mitchell", team: "CLE", pos: "G", age: 29, teamWins: 41, teamLosses: 14, teamGamesPlayed: 55, gamesStarted: 54, minutesPerGame: 33.1, pointsPerGame: 27.8, assistsPerGame: 5.2, reboundsPerGame: 4.6, blocksPerGame: 0.4, stealsPerGame: 1.5, foulsPerGame: 2.3, turnoversPerGame: 2.5, usageRate: 30.9, valueOverReplacement: 3.9, winShare: 8.8, boxPlusMinus: 6.9, trueShootingPercentage: 0.612 },
-  { player: "Anthony Edwards", team: "MIN", pos: "G", age: 24, teamWins: 33, teamLosses: 21, teamGamesPlayed: 54, gamesStarted: 54, minutesPerGame: 35.9, pointsPerGame: 28.4, assistsPerGame: 4.9, reboundsPerGame: 5.7, blocksPerGame: 0.6, stealsPerGame: 1.3, foulsPerGame: 2.6, turnoversPerGame: 3.1, usageRate: 31.2, valueOverReplacement: 3.8, winShare: 7.1, boxPlusMinus: 6.4, trueShootingPercentage: 0.594 },
+  { player: "Nikola Jokić", team: "DEN", pos: "C", age: 30, teamWins: 38, teamLosses: 17, teamGamesPlayed: 55, gamesStarted: 54, gamesPlayed: 54, minutesPerGame: 36.1, pointsPerGame: 29.4, assistsPerGame: 10.8, reboundsPerGame: 12.6, blocksPerGame: 0.7, stealsPerGame: 1.8, foulsPerGame: 2.3, turnoversPerGame: 3.5, usageRate: 30.1, valueOverReplacement: 6.4, winShare: 10.2, boxPlusMinus: 12.8, trueShootingPercentage: 0.662 },
+  { player: "Shai Gilgeous-Alexander", team: "OKC", pos: "G", age: 27, teamWins: 47, teamLosses: 8, teamGamesPlayed: 55, gamesStarted: 55, gamesPlayed: 55, minutesPerGame: 34.2, pointsPerGame: 32.6, assistsPerGame: 6.3, reboundsPerGame: 5.1, blocksPerGame: 1.0, stealsPerGame: 1.7, foulsPerGame: 2.1, turnoversPerGame: 2.4, usageRate: 33.8, valueOverReplacement: 5.9, winShare: 11.4, boxPlusMinus: 10.1, trueShootingPercentage: 0.639 },
+  { player: "Luka Dončić", team: "LAL", pos: "G", age: 26, teamWins: 34, teamLosses: 18, teamGamesPlayed: 52, gamesStarted: 33, gamesPlayed: 33, minutesPerGame: 36.8, pointsPerGame: 33.1, assistsPerGame: 8.9, reboundsPerGame: 8.4, blocksPerGame: 0.5, stealsPerGame: 1.6, foulsPerGame: 2.4, turnoversPerGame: 4.1, usageRate: 34.9, valueOverReplacement: 5.1, winShare: 8.2, boxPlusMinus: 9.4, trueShootingPercentage: 0.607 },
+  { player: "Victor Wembanyama", team: "SAS", pos: "C", age: 22, teamWins: 32, teamLosses: 16, teamGamesPlayed: 48, gamesStarted: 44, gamesPlayed: 44, minutesPerGame: 33.2, pointsPerGame: 26.1, assistsPerGame: 4.2, reboundsPerGame: 11.4, blocksPerGame: 3.7, stealsPerGame: 1.2, foulsPerGame: 2.9, turnoversPerGame: 3.4, usageRate: 30.6, valueOverReplacement: 5.4, winShare: 8.0, boxPlusMinus: 10.6, trueShootingPercentage: 0.606 },
+  { player: "Giannis Antetokounmpo", team: "MIL", pos: "F", age: 31, teamWins: 31, teamLosses: 23, teamGamesPlayed: 54, gamesStarted: 41, gamesPlayed: 41, minutesPerGame: 34.0, pointsPerGame: 31.2, assistsPerGame: 6.5, reboundsPerGame: 11.9, blocksPerGame: 1.2, stealsPerGame: 0.9, foulsPerGame: 2.7, turnoversPerGame: 3.3, usageRate: 33.1, valueOverReplacement: 4.6, winShare: 8.9, boxPlusMinus: 9.0, trueShootingPercentage: 0.618 },
+  { player: "Jayson Tatum", team: "BOS", pos: "F", age: 27, teamWins: 36, teamLosses: 19, teamGamesPlayed: 55, gamesStarted: 55, gamesPlayed: 55, minutesPerGame: 35.4, pointsPerGame: 27.3, assistsPerGame: 5.4, reboundsPerGame: 8.6, blocksPerGame: 0.6, stealsPerGame: 1.1, foulsPerGame: 2.2, turnoversPerGame: 2.8, usageRate: 29.4, valueOverReplacement: 4.2, winShare: 8.4, boxPlusMinus: 7.6, trueShootingPercentage: 0.601 },
+  { player: "Donovan Mitchell", team: "CLE", pos: "G", age: 29, teamWins: 41, teamLosses: 14, teamGamesPlayed: 55, gamesStarted: 54, gamesPlayed: 54, minutesPerGame: 33.1, pointsPerGame: 27.8, assistsPerGame: 5.2, reboundsPerGame: 4.6, blocksPerGame: 0.4, stealsPerGame: 1.5, foulsPerGame: 2.3, turnoversPerGame: 2.5, usageRate: 30.9, valueOverReplacement: 3.9, winShare: 8.8, boxPlusMinus: 6.9, trueShootingPercentage: 0.612 },
+  { player: "Anthony Edwards", team: "MIN", pos: "G", age: 24, teamWins: 33, teamLosses: 21, teamGamesPlayed: 54, gamesStarted: 54, gamesPlayed: 54, minutesPerGame: 35.9, pointsPerGame: 28.4, assistsPerGame: 4.9, reboundsPerGame: 5.7, blocksPerGame: 0.6, stealsPerGame: 1.3, foulsPerGame: 2.6, turnoversPerGame: 3.1, usageRate: 31.2, valueOverReplacement: 3.8, winShare: 7.1, boxPlusMinus: 6.4, trueShootingPercentage: 0.594 },
 ];
 
 export function breakdown(p: PlayerStats): Breakdown {
   const teamWinRatio = p.teamGamesPlayed > 0 ? p.teamWins / p.teamGamesPlayed : 0;
+  const availability =
+    p.teamGamesPlayed > 0 ? p.gamesPlayed / p.teamGamesPlayed : 0;
   const minutesFactor = p.minutesPerGame / 48;
   const usageFactor = p.usageRate / 100;
   const levelOfImpact = teamWinRatio * minutesFactor * usageFactor;
@@ -55,10 +57,13 @@ export function breakdown(p: PlayerStats): Breakdown {
       p.foulsPerGame -
       p.turnoversPerGame) /
     25;
+  // Availability multiplies the whole score, not just the win half — see the
+  // header comment on the backend's calculate-player-value.ts for why.
+  const rawValue = 0.5 * winContribution + 0.5 * totalStats;
   return {
-    teamWinRatio, minutesFactor, usageFactor, levelOfImpact, qualityOfImpact,
-    winContribution, totalStats,
-    mvpValue: 0.5 * winContribution + 0.5 * totalStats,
+    teamWinRatio, availability, minutesFactor, usageFactor, levelOfImpact,
+    qualityOfImpact, winContribution, rawValue, totalStats,
+    mvpValue: availability * rawValue,
   };
 }
 
@@ -100,7 +105,14 @@ const SNAPSHOTS: Snapshot[] = DATES.map((date, d) => {
     const drift = d === DAY_COUNT - 1 ? 0 : 1;
     const wc = b.winContribution * (1 + 0.13 * Math.sin(d * 0.33 + i * 1.9) * drift + 0.05 * wobble(i, d, 1) * drift);
     const ts = b.totalStats * (1 + 0.085 * Math.sin(d * 0.21 + i * 2.7) * drift + 0.04 * wobble(i, d, 2) * drift);
-    return { ...p, ...b, winContribution: wc, totalStats: ts, mvpValue: 0.5 * (wc + ts) };
+    // Availability applies here exactly as it does in breakdown(). Forgetting
+    // it produced a board whose ranks did not match its own scores.
+    const rawValue = 0.5 * (wc + ts);
+    return {
+      ...p, ...b,
+      winContribution: wc, totalStats: ts, rawValue,
+      mvpValue: b.availability * rawValue,
+    };
   }).sort((a, b) => b.mvpValue - a.mvpValue);
 
   const ranked = rows.map((r, n) => ({ ...r, calculatedRank: n + 1, date: date.key }));

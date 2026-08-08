@@ -9,6 +9,8 @@ export type PlayerStats = {
   teamLosses: number;
   teamGamesPlayed: number;
   gamesStarted: number;
+  /** Games the player appeared in. Divided by teamGamesPlayed, the availability factor. */
+  gamesPlayed: number;
   minutesPerGame: number;
   pointsPerGame: number;
   assistsPerGame: number;
@@ -27,11 +29,14 @@ export type PlayerStats = {
 /** The pieces of the MVP formula, kept separate so the UI can show the math. */
 export type Breakdown = {
   teamWinRatio: number;
+  availability: number;
   minutesFactor: number;
   usageFactor: number;
   levelOfImpact: number;
   qualityOfImpact: number;
   winContribution: number;
+  /** Before availability is applied — what the score would be at full health. */
+  rawValue: number;
   totalStats: number;
   mvpValue: number;
 };

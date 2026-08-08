@@ -1,15 +1,35 @@
-// Total Value = 0.5(Win Contribution) + 0.5(Total Stats)
+// Total Value = Availability * (0.5(Win Contribution) + 0.5(Total Stats))
+// Availability = Player Games / Team Games
 // Win Contribution = Level of Impact * Quality of Impact
-// Level of Impact = (Team Wins * Games Played/Total Games * Minutes Per Game/48 * Usage Rate/100)
+// Level of Impact = (Team Wins/Team Games) * (Minutes Per Game/48) * (Usage Rate/100)
 // Quality of Impact = 0.4(VORP + Win Share) + 0.2(Box Plus Minus)
-// Total Stats = (Points * True Shooting % * 1.5(Assists) + 1.2(Rebounds) + 3(Blocks) + 3(Steals) - Fouls - Turnovers) / 25
+// Total Stats = (Points * True Shooting % + 1.5(Assists) + 1.2(Rebounds) + 3(Blocks) + 3(Steals) - Fouls - Turnovers) / 25
 // Link to the top 10 MVP candidates: https://www.basketball-reference.com/friv/mvp.html
+//
+// Availability multiplies the WHOLE score rather than sitting inside Level of
+// Impact, and that placement is the entire point.
+//
+// Total Stats is built from per-game rates, so it cannot tell a player who
+// appeared 25 times from one who appeared 55. It is also the larger half of the
+// score. Leaving it untouched meant a player available for 45% of his team's
+// games still scored 72% of an ever-present peer — less of a penalty than
+// simply pro-rating him. Applying availability at the top brings that to 38%.
+//
+// So absence is penalised twice, deliberately: VORP and Win Shares are
+// cumulative and already stop accruing while a player sits, and availability
+// compounds that. The result is harsher than proportional, which is how MVP
+// voting actually treats missed games.
 
 import logger from "../../utils/logger";
 import {
+  CURRENT_FORMULA_VERSION,
+  PlayerWithCalculatedMvpValueSchema,
+} from "../../utils/types";
+// Type-only, so this file can be pulled into the front end's program (which
+// runs with verbatimModuleSyntax) without dragging Zod in as a value import.
+import type {
   FullPlayerSummary,
   PlayerWithCalculatedMvpValue,
-  PlayerWithCalculatedMvpValueSchema,
 } from "../../utils/types";
 
 // Exported for tests: the scoring rule is the product this repo exists to
@@ -19,6 +39,13 @@ export function calculatePlayerValue(player: FullPlayerSummary): number {
   logger.info(`calculating mvp value for ${player.player}`);
   const teamWinRatio =
     player.teamGamesPlayed > 0 ? player.teamWins / player.teamGamesPlayed : 0;
+
+  // Share of his team's games the player was actually available for. Guarded
+  // the same way as the win ratio: a team with no games played yet must not
+  // produce NaN, because NaN comparisons are all false and the ranking sort
+  // would silently stop sorting rather than visibly break.
+  const availability =
+    player.teamGamesPlayed > 0 ? player.gamesPlayed / player.teamGamesPlayed : 0;
 
   const minutesFactor = player.minutesPerGame / 48;
 
@@ -50,13 +77,13 @@ export function calculatePlayerValue(player: FullPlayerSummary): number {
 
   // ---- Final Total Value ----
 
-  const totalValue = 0.5 * winContribution + 0.5 * totalStats;
+  const totalValue = availability * (0.5 * winContribution + 0.5 * totalStats);
   logger.info(`mvp value: ${totalValue}`);
   return totalValue;
 }
 
 export function calculateAllPlayerValues(
-  players: FullPlayerSummary[]
+  players: FullPlayerSummary[],
 ): PlayerWithCalculatedMvpValue[] {
   const sortedPlayers = players
     .map((player) => {
@@ -75,6 +102,7 @@ export function calculateAllPlayerValues(
     const ranked = {
       ...player,
       calculatedRank: index + 1,
+      formulaVersion: CURRENT_FORMULA_VERSION,
     };
 
     const validated = PlayerWithCalculatedMvpValueSchema.safeParse(ranked);
@@ -83,7 +111,7 @@ export function calculateAllPlayerValues(
       logger.error(`Output validation failed for player ${player.player}:`);
       logger.error(validated.error.format());
       throw new Error(
-        `Invalid PlayerWithCalculatedMvpValue for ${player.player}`
+        `Invalid PlayerWithCalculatedMvpValue for ${player.player}`,
       );
     }
 

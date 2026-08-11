@@ -51,12 +51,42 @@ export type FullPlayerSummary = z.infer<typeof FullPlayerSummarySchema>;
  */
 export const CURRENT_FORMULA_VERSION = 2;
 
-export const PlayerWithCalculatedMvpValueSchema =
-  FullPlayerSummarySchema.extend({
-    mvpValue: z.number(),
-    calculatedRank: z.number(),
-    formulaVersion: z.number(),
-  });
+/**
+ * Every intermediate term of the scoring formula, stored alongside the result.
+ *
+ * These are not extra work — `scoreBreakdown()` already computes all of them to
+ * arrive at `mvpValue`. Previously only the final number was kept and the rest
+ * were discarded, which forced the front end to re-run the whole formula from
+ * the raw stats just to show a player's win-contribution split. That gave the
+ * app two independent implementations of one calculation, and they drifted.
+ *
+ * Storing them makes the browser a pure view layer: nothing on screen is
+ * derived from anything except these fields.
+ *
+ * Keys must match the `Breakdown` type in the formula module — there is a test
+ * asserting exactly that, since a schema silently missing a field would be
+ * stripped by Zod on the way to MongoDB.
+ */
+export const BreakdownSchema = z.object({
+  teamWinRatio: z.number(),
+  availability: z.number(),
+  minutesFactor: z.number(),
+  usageFactor: z.number(),
+  levelOfImpact: z.number(),
+  qualityOfImpact: z.number(),
+  winContribution: z.number(),
+  totalStats: z.number(),
+  /** Before availability is applied — the score at full health. */
+  rawValue: z.number(),
+  mvpValue: z.number(),
+});
+
+export const PlayerWithCalculatedMvpValueSchema = FullPlayerSummarySchema.extend(
+  BreakdownSchema.shape,
+).extend({
+  calculatedRank: z.number(),
+  formulaVersion: z.number(),
+});
 
 export type PlayerWithCalculatedMvpValue = z.infer<
   typeof PlayerWithCalculatedMvpValueSchema

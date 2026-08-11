@@ -17,10 +17,12 @@ import {
   calculatePlayerValue,
 } from "./calculate-player-value";
 import {
+  BreakdownSchema,
   CURRENT_FORMULA_VERSION,
   FullPlayerSummary,
   FullPlayerSummarySchema,
 } from "../../utils/types";
+import { scoreBreakdown } from "../../shared/mvp-formula";
 
 /** A complete, schema-valid player. Tests override only what they exercise. */
 function player(overrides: Partial<FullPlayerSummary> = {}): FullPlayerSummary {
@@ -362,6 +364,49 @@ describe("availability", () => {
     );
 
     expect(Number.isFinite(value)).toBe(true);
+  });
+});
+
+describe("the stored row keeps the whole breakdown", () => {
+  // Zod strips unknown keys. If BreakdownSchema is missing a field that
+  // scoreBreakdown() returns, that field is silently dropped on its way to
+  // MongoDB — no error, no warning, just a column that is never written and a
+  // front end that has to recompute it. That is precisely the gap that gave
+  // this app two implementations of one formula.
+  it("stores every term the formula computes", () => {
+    const computed = Object.keys(scoreBreakdown(player()));
+    const stored = Object.keys(BreakdownSchema.shape);
+
+    expect(stored.sort()).toEqual(computed.sort());
+  });
+
+  // The round trip that matters: what comes out of calculateAllPlayerValues is
+  // what Zod validated, so anything the schema does not know about is already
+  // gone by the time this runs.
+  it("survives validation with every term intact", () => {
+    const p = player({ gamesPlayed: 40, teamGamesPlayed: 55 });
+    const expected = scoreBreakdown(p);
+    const [row] = calculateAllPlayerValues([p]);
+
+    for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
+      expect(row[key]).toBeCloseTo(expected[key], 12);
+    }
+  });
+
+  // The front end reads these to draw the win/stats split bar and the formula
+  // panel. If they did not reconcile with mvpValue, the UI would show numbers
+  // that do not add up to the total printed beside them — which it did, before
+  // the hero card was fixed.
+  it("stores terms that reconcile with the stored score", () => {
+    const [row] = calculateAllPlayerValues([
+      player({ gamesPlayed: 40, teamGamesPlayed: 55 }),
+    ]);
+
+    expect(0.5 * row.winContribution + 0.5 * row.totalStats).toBeCloseTo(
+      row.rawValue,
+      12,
+    );
+    expect(row.availability * row.rawValue).toBeCloseTo(row.mvpValue, 12);
   });
 });
 

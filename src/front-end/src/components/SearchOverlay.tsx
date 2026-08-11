@@ -28,7 +28,9 @@ export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer
         player: p.player,
         initials: initials(p.player),
         rank: `#${p.calculatedRank}`,
-        meta: `${D.TEAMS[p.team] ?? p.team} · ${p.pos} · ${p.pointsPerGame.toFixed(1)} PPG`,
+        meta: [D.TEAMS[p.team] ?? p.team, p.pos, `${p.pointsPerGame.toFixed(1)} PPG`]
+          .filter(Boolean)
+          .join(" · "),
         score: fmt(p.mvpValue),
       }));
   }, [D, query]);

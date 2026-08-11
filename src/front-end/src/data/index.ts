@@ -5,7 +5,7 @@
 //
 // Fixture is the default so a fresh clone runs with `pnpm install && pnpm dev`.
 
-import { fixtureSource } from "./fixture";
+import { loadFixtureSource } from "./fixture";
 import { loadApiSource } from "./api";
 import type { DataSource } from "./types";
 
@@ -16,7 +16,7 @@ export const DATA_MODE: DataMode =
 
 export async function loadDataSource(): Promise<DataSource> {
   if (DATA_MODE === "api") return loadApiSource();
-  return fixtureSource;
+  return loadFixtureSource();
 }
 
 export type { DataSource } from "./types";

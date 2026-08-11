@@ -32,7 +32,8 @@ export default function PlayerProfileView({
   const p = D.findPlayer(playerName) ?? D.PLAYERS[0];
   const todayRows = D.rankings(D.TODAY_KEY) ?? [];
   const todayRow = todayRows.find((r) => r.player === p.player) ?? todayRows[0];
-  const b = D.breakdown(p);
+  // The row already carries every term of the formula — read it, never recompute.
+  const b = todayRow ?? p;
   const totalHalf = b.winContribution + b.totalStats;
 
   const hist = D.history(p.player, D.TODAY_KEY, 30).filter((x) => x.rank != null);
@@ -92,7 +93,15 @@ export default function PlayerProfileView({
             {p.player}
           </h1>
           <div style={{ marginTop: 10, fontSize: 13, color: C.textDim }}>
-            {`${p.pos} · Age ${p.age} · ${p.teamWins}–${p.teamLosses} · ${p.gamesStarted} starts · ${p.minutesPerGame.toFixed(1)} MPG`}
+            {[
+              p.pos,
+              p.age != null ? `Age ${p.age}` : null,
+              `${p.teamWins}–${p.teamLosses}`,
+              `${p.gamesPlayed}/${p.teamGamesPlayed} games`,
+              `${p.minutesPerGame.toFixed(1)} MPG`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         </div>
 

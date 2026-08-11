@@ -165,7 +165,7 @@ function Shell() {
       )}
 
       {panelOpen && (
-        <FormulaPanel D={D} player={focusPlayer} onClose={() => setPanelOpen(false)} />
+        <FormulaPanel player={focusPlayer} onClose={() => setPanelOpen(false)} />
       )}
 
       {toast && (

@@ -2,17 +2,19 @@
 // substituted in, so the score is auditable rather than a black box.
 
 import { C, MONO, fmt, label } from "../theme";
-import type { DataSource, PlayerStats } from "../data/types";
+import type { RankedPlayer } from "../data/types";
 import { CloseIcon, HoverButton } from "./ui";
 
 type Props = {
-  D: DataSource;
-  player: PlayerStats;
+  player: RankedPlayer;
   onClose: () => void;
 };
 
-export default function FormulaPanel({ D, player, onClose }: Props) {
-  const b = D.breakdown(player);
+export default function FormulaPanel({ player, onClose }: Props) {
+  // Every term shown here was computed by the backend and stored on the row.
+  // The panel explains the number beside it because it IS that number, rather
+  // than a second calculation that happens to agree.
+  const b = player;
 
   const steps = [
     {

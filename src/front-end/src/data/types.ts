@@ -3,8 +3,13 @@
 export type PlayerStats = {
   player: string;
   team: string;
-  pos: string;
-  age: number;
+  /**
+   * Position and age were added to the scraper after most rows were collected,
+   * so historical rows carry null. The UI omits them rather than printing the
+   * word "null" where a value should be.
+   */
+  pos: string | null;
+  age: number | null;
   teamWins: number;
   teamLosses: number;
   teamGamesPlayed: number;
@@ -26,20 +31,13 @@ export type PlayerStats = {
   trueShootingPercentage: number;
 };
 
-/** The pieces of the MVP formula, kept separate so the UI can show the math. */
-export type Breakdown = {
-  teamWinRatio: number;
-  availability: number;
-  minutesFactor: number;
-  usageFactor: number;
-  levelOfImpact: number;
-  qualityOfImpact: number;
-  winContribution: number;
-  /** Before availability is applied — what the score would be at full health. */
-  rawValue: number;
-  totalStats: number;
-  mvpValue: number;
-};
+// The pieces of the MVP formula, kept separate so the UI can show the math.
+// Re-exported from the shared module rather than restated here: a second
+// declaration would let the UI describe a shape the formula no longer returns.
+// Imported as well as re-exported, because a bare `export ... from` does not
+// bring the name into this file's scope, and RankedPlayer below needs it.
+import type { Breakdown } from "../../../shared/mvp-formula";
+export type { Breakdown };
 
 export type DateInfo = {
   key: string; // "2-17-2026" — matches the API's :date param
@@ -49,18 +47,28 @@ export type DateInfo = {
   weekday: string;
 };
 
-export type RankedPlayer = PlayerStats &
+/**
+ * A row exactly as the backend stored it: the scraped stats, every term of the
+ * scoring formula, and which formula version produced them.
+ *
+ * The front end never recreates any of this — it is read, not derived.
+ */
+export type StoredRow = PlayerStats &
   Breakdown & {
-    calculatedRank: number;
     date: string;
-    /** Rank movement vs the previous day that actually has data. */
-    delta: number;
+    calculatedRank: number;
+    formulaVersion?: number;
   };
+
+export type RankedPlayer = StoredRow & {
+  /** Rank movement vs the previous day that actually has data. */
+  delta: number;
+};
 
 export type Snapshot = {
   date: DateInfo;
   missing: boolean;
-  rows: (PlayerStats & Breakdown & { calculatedRank: number; date: string })[];
+  rows: StoredRow[];
 };
 
 /** One day in a player's history. rank/score are null on days the collector failed. */
@@ -91,17 +99,17 @@ export type Game = {
  */
 export type DataSource = {
   TEAMS: Record<string, string>;
-  PLAYERS: PlayerStats[];
+  /** Each tracked player's most recent row, current leader first. */
+  PLAYERS: RankedPlayer[];
   DATES: DateInfo[];
   MISSING: Set<string>;
   TODAY_KEY: string;
-  breakdown(p: PlayerStats): Breakdown;
   snapshot(dateKey: string): Snapshot | null;
   dateIndex(dateKey: string): number;
   previousWithData(dateKey: string): Snapshot | null;
   nearestWithData(dateKey: string, count: number): DateInfo[];
   rankings(dateKey: string): RankedPlayer[] | null;
   history(playerName: string, dateKey: string, days: number): HistoryPoint[];
-  findPlayer(name: string): PlayerStats | undefined;
+  findPlayer(name: string): RankedPlayer | undefined;
   nextGames(playerName: string): Game[];
 };

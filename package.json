@@ -4,7 +4,8 @@
     "start": "ts-node src/main.ts",
     "start-server": "ts-node src/api/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "generate-fixture": "ts-node scripts/generate-fixture.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"]

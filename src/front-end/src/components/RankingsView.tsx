@@ -61,7 +61,11 @@ export default function RankingsView({
         `${Math.round((p.totalStats / total) * 100)}% stats`,
       meta:
         `${D.TEAMS[p.team] ?? p.team} · ${p.teamWins}–${p.teamGamesPlayed - p.teamWins} · ` +
-        `${p.pos} · ${p.pointsPerGame.toFixed(1)}/${p.reboundsPerGame.toFixed(1)}/${p.assistsPerGame.toFixed(1)}`,
+        // Rows scraped before `pos` existed carry null; drop the segment rather
+        // than rendering the word "null" between two real values.
+        [p.pos, `${p.pointsPerGame.toFixed(1)}/${p.reboundsPerGame.toFixed(1)}/${p.assistsPerGame.toFixed(1)}`]
+          .filter(Boolean)
+          .join(" · "),
     };
   };
 
@@ -91,7 +95,7 @@ export default function RankingsView({
             </h1>
             <div style={{ marginTop: 8, fontSize: 13, color: C.textDim }}>
               {hasData
-                ? `Top ${topN} of ${D.PLAYERS.length} tracked · total value = 0.5 win contribution + 0.5 total stats`
+                ? `Top ${topN} of ${D.PLAYERS.length} tracked · total value = availability × (0.5 win contribution + 0.5 total stats)`
                 : "The collector did not run on this date"}
             </div>
           </div>
@@ -226,6 +230,14 @@ export default function RankingsView({
                       <span style={{ width: 8, height: 8, borderRadius: 2, background: C.accentDeep }} />
                       Total stats {fmt(hero.totalStats)}
                     </span>
+                    {/* Without this the two figures above do not reconcile with the
+                        MVP value shown alongside them — availability is the gap. */}
+                    {hero.availability < 1 && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 7, color: C.textFaint }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: C.line }} />
+                        {`× ${fmt(hero.availability)} availability (${hero.gamesPlayed}/${hero.teamGamesPlayed})`}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -423,12 +435,15 @@ export default function RankingsView({
         <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, background: C.surface, padding: 20 }}>
           <div style={{ ...label, marginBottom: 12 }}>The formula</div>
           <div style={{ fontFamily: MONO, fontSize: 12, lineHeight: 1.8, color: C.textMuted }}>
-            <div>Total = <span style={{ color: C.accentBright }}>0.5</span> · Win Contribution</div>
-            <div style={{ paddingLeft: 46 }}>+ <span style={{ color: C.accentBright }}>0.5</span> · Total Stats</div>
+            <div>Total = <span style={{ color: C.accentBright }}>availability</span> ·</div>
+            <div style={{ paddingLeft: 22 }}>( <span style={{ color: C.accentBright }}>0.5</span> · Win Contribution</div>
+            <div style={{ paddingLeft: 46 }}>+ <span style={{ color: C.accentBright }}>0.5</span> · Total Stats )</div>
           </div>
           <p style={{ margin: "14px 0 16px", fontSize: 12, color: C.textFaint, textWrap: "pretty" }}>
             Half of the score is what a player does for winning basketball; half is raw
-            production, efficiency-weighted.
+            production, efficiency-weighted. Both are then scaled by the share of his
+            team's games he was available for — every other term is a per-game rate and
+            cannot tell 25 appearances from 55.
           </p>
           <HoverButton
             onClick={onTogglePanel}

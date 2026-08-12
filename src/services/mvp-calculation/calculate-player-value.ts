@@ -69,7 +69,7 @@ export function calculateAllPlayerValues(
 
     if (!validated.success) {
       logger.error(`Output validation failed for player ${player.player}:`);
-      logger.error(validated.error.format());
+      logger.error(validated.error.issues);
       throw new Error(
         `Invalid PlayerWithCalculatedMvpValue for ${player.player}`,
       );

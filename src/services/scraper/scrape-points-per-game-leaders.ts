@@ -61,7 +61,7 @@ export async function scrapePpgLeaders(data: {
 
   if (!result.success) {
     logger.error("PPG leader validation failed");
-    logger.error(result.error.format());
+    logger.error(result.error.issues);
     throw new Error("PPG leader validation failed");
   }
 

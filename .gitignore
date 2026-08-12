@@ -26,3 +26,9 @@ yarn-error.log*
 # Environment and config
 .env
 .env.*
+
+# Fetched game logs, rebuildable with pnpm fetch-game-logs
+.cache/
+
+# Pre-migration collection dumps
+backups/

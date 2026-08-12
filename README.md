@@ -10,6 +10,8 @@ through a season is often a poor guide to who is actually playing the best.
 Ranking runs on box score and team record only, with no input from how much a
 player is being discussed.
 
+The MVP formula was taken from this article: https://medium.com/data-science/nba-mvp-predictor-c700e50e0917
+
 ## Run the front end
 
 No database required. The app ships with 30 days of generated fixture data —
@@ -113,11 +115,11 @@ need one to see the app.
 
 API surface:
 
-| Route | Returns |
-|---|---|
-| `GET /daily-mvp-rankings` | every record across all dates, newest first |
-| `GET /daily-mvp-rankings/:date` | one date (`M-D-YYYY`), 404 when no scrape ran |
-| `GET /api/players/:playerName/daily-mvp-rankings` | one player's history |
+| Route                                             | Returns                                       |
+| ------------------------------------------------- | --------------------------------------------- |
+| `GET /daily-mvp-rankings`                         | every record across all dates, newest first   |
+| `GET /daily-mvp-rankings/:date`                   | one date (`M-D-YYYY`), 404 when no scrape ran |
+| `GET /api/players/:playerName/daily-mvp-rankings` | one player's history                          |
 
 The 404 is deliberate. A day with no scrape is not a day with no candidates, and
 collapsing the two would let a collector failure look like a real result.

@@ -17,7 +17,6 @@ function row(over: Partial<StoredRow> = {}): StoredRow {
   return {
     date: "3-1-2026",
     player: "Test Player",
-    profileUrl: "https://www.basketball-reference.com/players/t/test01.html",
     team: "DEN",
     pos: "C",
     age: 30,
@@ -82,7 +81,9 @@ describe("refusing data it cannot render", () => {
   });
 
   it("throws on an empty result rather than rendering an empty board", () => {
-    expect(() => buildDataSource([], "The API")).toThrowError(/no ranking rows/i);
+    expect(() => buildDataSource([], "The API")).toThrowError(
+      /no ranking rows/i,
+    );
   });
 });
 
@@ -100,7 +101,11 @@ describe("days the collector missed", () => {
   );
 
   it("keeps missing days on the calendar", () => {
-    expect(D.DATES.map((d) => d.key)).toEqual(["3-1-2026", "3-2-2026", "3-3-2026"]);
+    expect(D.DATES.map((d) => d.key)).toEqual([
+      "3-1-2026",
+      "3-2-2026",
+      "3-3-2026",
+    ]);
     expect([...D.MISSING]).toEqual(["3-2-2026"]);
   });
 

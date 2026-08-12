@@ -29,6 +29,15 @@
     "rootDir": "./src" /* Emit layout is relative to src, so dist mirrors it. */,
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
     "moduleResolution": "node" /* Specify how TypeScript looks up a file from a given module specifier. */,
+    /* "node" is deprecated and TypeScript 7 will drop it. Migrating to
+       "node16"/"nodenext" is not a config change: those modes require explicit
+       file extensions on every relative import and honour package.json
+       "exports", neither of which this CommonJS backend does. Silenced
+       deliberately; the migration is its own piece of work.
+       "5.0" is the value TypeScript 5.9 accepts — a newer editor TypeScript
+       may ask for "6.0" instead, in which case point the editor at the
+       workspace version rather than changing this. */
+    "ignoreDeprecations": "5.0",
     // "baseUrl": "./",                                  /* Specify the base directory to resolve non-relative module names. */
     // "paths": {},                                      /* Specify a set of entries that re-map imports to additional lookup locations. */
     // "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */
@@ -112,6 +121,9 @@
     "dist/**/*",
     "src/front-end",
     "**/*.test.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    /* Dev tools, run with ts-node. They live outside rootDir and are never
+       part of the compiled server output. */
+    "scripts/**/*"
   ]
 }

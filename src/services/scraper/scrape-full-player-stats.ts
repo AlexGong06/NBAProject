@@ -45,10 +45,16 @@ export async function fetchAllPlayerStats(data: {
       let raw = cell.textContent?.trim() || "";
       // Handle case where a player has 2 teams during season (traded)
       if (raw === "2TM") {
+        // Optional chaining, because this selector searches the whole document
+        // rather than the row and can legitimately find nothing. Without it a
+        // traded player whose fallback cell is absent throws a TypeError in the
+        // browser context, which surfaces as an opaque Playwright failure.
+        // Returning "" instead lets the null below reach Zod, which names the
+        // field it rejected.
         const newTeam =
           document
             .querySelector(`td[data-stat='team_name_abbr']`)
-            .textContent?.trim() || "";
+            ?.textContent?.trim() || "";
         raw = newTeam;
       }
       return raw === "" ? null : raw.replace("%", "");
@@ -97,11 +103,17 @@ export async function fetchAllPlayerStats(data: {
     };
   }, advancedRowId);
 
-  if (!advancedStats || !perGameStats) {
-    logger.warn(
-      `Could not find advanced/per game stats row for ${data.playerName}`,
+  // This used to log a warning and then read perGameStats.team on the next
+  // line regardless, so the "recovery" was a TypeError one statement later.
+  // Stop here instead, naming the player and the season row that was missing.
+  if (!perGameStats || !advancedStats) {
+    throw new Error(
+      `No ${!perGameStats ? "per-game" : "advanced"} stats row for ` +
+        `${data.playerName} in season ${season}. The player may not have ` +
+        `played this season, or Basketball Reference changed the row id.`,
     );
   }
+
   logger.info(
     `navigating to team page to scrape team wins: ${perGameStats.team}`,
   );
@@ -121,10 +133,23 @@ export async function fetchAllPlayerStats(data: {
     };
     const teamWins = getTeamStat("wins");
     const teamLoses = getTeamStat("losses");
+
+    // Do not add these without checking.
+    //
+    // JavaScript coerces null to 0 in arithmetic, so a failed read produced
+    // `null + null === 0` — a team that had played no games — and `null + 35`
+    // produced 35, a record that looks entirely ordinary. Neither throws. One
+    // row in the collection (11-26-2025, Cade Cunningham) was stored that way
+    // and scored wrong for nine months before anyone noticed.
+    //
+    // Returning null instead lets the Zod schema reject the row and name the
+    // field, which stops the pipeline rather than storing a plausible lie.
+    const bothRead = teamWins !== null && teamLoses !== null;
+
     return {
       teamWins,
       teamLosses: teamLoses,
-      teamGamesPlayed: teamLoses + teamWins,
+      teamGamesPlayed: bothRead ? teamLoses + teamWins : null,
     };
   });
   // Return Full Player object with all necessary statistics to calculate MVP value
@@ -147,7 +172,7 @@ export async function fetchAllPlayerStats(data: {
 
   if (!result.success) {
     logger.error(`Validation failed for player ${data.playerName}:`);
-    logger.error(result.error.format());
+    logger.error(result.error.issues);
     throw new Error(
       `FullPlayerSummary validation failed for ${data.playerName}`,
     );

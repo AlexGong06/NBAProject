@@ -78,15 +78,15 @@ export function deltaShort(d: number): string {
 export const LEAGUE_NOTES: Record<string, string> = {
   PTS: "per game", AST: "per game", REB: "per game", BLK: "per game",
   STL: "per game", MIN: "per game", "USG%": "possessions used",
-  "TS%": "true shooting", VORP: "value over replacement",
-  WS: "win shares", BPM: "box plus/minus", TOV: "per game",
+  "TS%": "true shooting", PIE: "player impact estimate",
+  NRTG: "net rating, per 100 poss", TOV: "per game",
 };
 
 export function statList(p: {
   pointsPerGame: number; assistsPerGame: number; reboundsPerGame: number;
   blocksPerGame: number; stealsPerGame: number; minutesPerGame: number;
   usageRate: number; trueShootingPercentage: number;
-  valueOverReplacement: number; winShare: number; boxPlusMinus: number;
+  pie: number; netRating: number;
   turnoversPerGame: number;
 }) {
   return [
@@ -96,11 +96,16 @@ export function statList(p: {
     { label: "BLK", value: p.blocksPerGame.toFixed(1) },
     { label: "STL", value: p.stealsPerGame.toFixed(1) },
     { label: "MIN", value: p.minutesPerGame.toFixed(1) },
-    { label: "USG%", value: p.usageRate.toFixed(1) },
+    // Usage, PIE and true shooting are all stored as fractions and are all
+    // displayed as percentages, so each needs its own × 100 here. Omitting one
+    // prints "0.3" beside a label reading USG%, which looks like a bad player
+    // rather than a bug.
+    { label: "USG%", value: (p.usageRate * 100).toFixed(1) },
     { label: "TS%", value: (p.trueShootingPercentage * 100).toFixed(1) },
-    { label: "VORP", value: p.valueOverReplacement.toFixed(1) },
-    { label: "WS", value: p.winShare.toFixed(1) },
-    { label: "BPM", value: p.boxPlusMinus.toFixed(1) },
+    { label: "PIE", value: (p.pie * 100).toFixed(1) },
+    // Net rating is already per 100 possessions — no scaling, and signed,
+    // because a negative is meaningful.
+    { label: "NRTG", value: p.netRating.toFixed(1) },
     { label: "TOV", value: p.turnoversPerGame.toFixed(1) },
   ];
 }

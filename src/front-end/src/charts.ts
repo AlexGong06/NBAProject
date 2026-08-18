@@ -11,12 +11,21 @@ export type Segment = { id: string; points: string; color: string; width: number
 export type Gap = { id: string; x1: number; y1: number; x2: number; y2: number; color: string };
 export type GridLine = { id: string | number; y: number; ty: number; x1: number; x2: number; label: string };
 
+/**
+ * @param maxRank worst rank drawn at the bottom edge
+ * @param minRank best rank drawn at the top edge. Defaults to 1, which is right
+ *   for a leaderboard — but any player outside the top few needs a window
+ *   around his own range, or his line falls off the bottom of the chart.
+ */
 export function rankGeometry(
-  points: HistoryPoint[], w: number, h: number, pad: Pad, maxRank: number,
+  points: HistoryPoint[], w: number, h: number, pad: Pad, maxRank: number, minRank = 1,
 ) {
   const n = points.length;
   const x = (i: number) => pad.l + (n === 1 ? 0 : (i * (w - pad.l - pad.r)) / (n - 1));
-  const y = (rank: number) => pad.t + ((rank - 1) * (h - pad.t - pad.b)) / (maxRank - 1);
+  // Guard the degenerate span: a player whose rank never moves would otherwise
+  // divide by zero and render at NaN, which draws nothing at all.
+  const span = Math.max(1, maxRank - minRank);
+  const y = (rank: number) => pad.t + ((rank - minRank) * (h - pad.t - pad.b)) / span;
 
   const segments: Dot[][] = [];
   const gaps: { x1: number; y1: number; x2: number; y2: number }[] = [];
@@ -178,9 +187,38 @@ export function mainChart(
     return out;
   }
 
-  const g = rankGeometry(base, w, h, pad, 8);
-  out.grid = [1, 2, 3, 4, 5, 6, 7, 8].map((r) => {
-    const y = pad.t + ((r - 1) * (h - pad.t - pad.b)) / 7;
+  // The rank axis follows the player.
+  //
+  // It used to be hardcoded to #1-#8, which was fine while only the top twenty
+  // were reachable. Now that any of 582 players can be opened, a fixed top-8
+  // axis draws everyone else below the bottom edge — Joan Beringer at #384 got
+  // a chart that was completely empty, which reads as "no data" rather than
+  // "off the scale".
+  //
+  // Contenders keep the familiar #1-#8 view so the leaderboard's charts are
+  // unchanged; anyone below that gets a window around his own range, which is
+  // where his movement actually is.
+  const ranks = base.filter((p) => p.rank != null).map((p) => p.rank as number);
+  const best = ranks.length ? Math.min(...ranks) : 1;
+  const worst = ranks.length ? Math.max(...ranks) : 8;
+
+  let lo = 1;
+  let hi = 8;
+  if (worst > 8) {
+    const margin = Math.max(1, Math.ceil((worst - best) * 0.15));
+    lo = Math.max(1, best - margin);
+    hi = worst + margin;
+  }
+
+  const g = rankGeometry(base, w, h, pad, hi, lo);
+  // Eight evenly spaced lines for the top-8 view, five otherwise — enough to
+  // read a wide range without crowding the labels.
+  const gridRanks =
+    hi === 8 && lo === 1
+      ? [1, 2, 3, 4, 5, 6, 7, 8]
+      : Array.from({ length: 5 }, (_, i) => Math.round(lo + ((hi - lo) * i) / 4));
+  out.grid = gridRanks.map((r) => {
+    const y = pad.t + ((r - lo) * (h - pad.t - pad.b)) / Math.max(1, hi - lo);
     return { id: r, y, ty: y + 4, x1: pad.l, x2: w - pad.r, label: `#${r}` };
   });
   g.segments.forEach((s) => out.segments.push({ id: `s${s.id}`, points: s.points, color: C.accentBright, width: 2.6 }));

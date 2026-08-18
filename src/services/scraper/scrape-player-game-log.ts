@@ -32,6 +32,23 @@ import logger from "../../utils/logger";
 /** Basketball Reference asks for no more than ~20 requests a minute. */
 export const POLITE_DELAY_MS = 3000;
 
+/** One game's box score. Null on games the player did not appear in. */
+export type BoxScore = {
+  /** Decimal minutes — the page reports "40:50", which is 40.83. */
+  minutes: number;
+  points: number;
+  assists: number;
+  rebounds: number;
+  blocks: number;
+  steals: number;
+  fouls: number;
+  turnovers: number;
+  fieldGoals: number;
+  fieldGoalAttempts: number;
+  freeThrows: number;
+  freeThrowAttempts: number;
+};
+
 export type GameLogEntry = {
   /** ISO "YYYY-MM-DD" — sortable as a string, unlike our M-D-YYYY keys. */
   date: string;
@@ -47,7 +64,18 @@ export type GameLogEntry = {
    * season, usable to repair a row whose team scrape failed.
    */
   teamWon: boolean | null;
+  /** The game's box score, or null if he did not play. */
+  box: BoxScore | null;
 };
+
+/** "40:50" -> 40.833. Returns 0 for a blank or malformed cell. */
+export function parseMinutes(raw: string): number {
+  const [m, s] = raw.split(":");
+  const minutes = Number(m);
+  if (!Number.isFinite(minutes)) return 0;
+  const seconds = Number(s);
+  return minutes + (Number.isFinite(seconds) ? seconds / 60 : 0);
+}
 
 /** Turn a profile URL into its game-log URL for a season. */
 export function gameLogUrl(profileUrl: string, season: string | number): string {
@@ -108,12 +136,34 @@ export function parseGameLog(html: string): GameLogEntry[] {
         ? false
         : null;
 
+    const played = careerGameNum !== "";
+    const num = (stat: string) =>
+      Number(row.find(`td[data-stat='${stat}']`).first().text().trim()) || 0;
+
     entries.push({
       date,
       gamesPlayedToDate: lastGamesPlayed,
       teamGamesToDate: Number(teamGame) || 0,
-      played: careerGameNum !== "",
+      played,
       teamWon,
+      // Missed games carry no box-score cells at all, so null rather than a row
+      // of zeroes — zeroes would drag every season-to-date average down.
+      box: played
+        ? {
+            minutes: parseMinutes(row.find("td[data-stat='mp']").first().text().trim()),
+            points: num("pts"),
+            assists: num("ast"),
+            rebounds: num("trb"),
+            blocks: num("blk"),
+            steals: num("stl"),
+            fouls: num("pf"),
+            turnovers: num("tov"),
+            fieldGoals: num("fg"),
+            fieldGoalAttempts: num("fga"),
+            freeThrows: num("ft"),
+            freeThrowAttempts: num("fta"),
+          }
+        : null,
     });
   });
 
@@ -197,6 +247,78 @@ export function gamesPlayedAtTeamGame(
     result = entry.gamesPlayedToDate;
   }
   return result;
+}
+
+/**
+ * Season-to-date per-game averages by the time the team had played `teamGames`.
+ *
+ * Exactly what the scraper would have read off the player's season page that
+ * day, reconstructed from the games themselves — no estimation. Averages are
+ * over games PLAYED, matching Basketball Reference, so a missed game does not
+ * count as a zero.
+ *
+ * True shooting is computed from season totals rather than by averaging
+ * per-game percentages: PTS / (2 × (FGA + 0.44 × FTA)). Averaging the
+ * percentages would weight a two-shot night the same as a twenty-shot one.
+ *
+ * Returns null before the player's first appearance, where there is no average
+ * to report and a zero would read as a real one.
+ */
+export type SeasonToDate = {
+  gamesPlayed: number;
+  minutesPerGame: number;
+  pointsPerGame: number;
+  assistsPerGame: number;
+  reboundsPerGame: number;
+  blocksPerGame: number;
+  stealsPerGame: number;
+  foulsPerGame: number;
+  turnoversPerGame: number;
+  trueShootingPercentage: number;
+};
+
+export function seasonToDate(
+  entries: GameLogEntry[],
+  teamGames: number,
+): SeasonToDate | null {
+  const t = {
+    games: 0, minutes: 0, points: 0, assists: 0, rebounds: 0, blocks: 0,
+    steals: 0, fouls: 0, turnovers: 0, fga: 0, fta: 0,
+  };
+
+  for (const e of entries) {
+    if (e.teamGamesToDate > teamGames) break;
+    if (!e.box) continue;
+    t.games++;
+    t.minutes += e.box.minutes;
+    t.points += e.box.points;
+    t.assists += e.box.assists;
+    t.rebounds += e.box.rebounds;
+    t.blocks += e.box.blocks;
+    t.steals += e.box.steals;
+    t.fouls += e.box.fouls;
+    t.turnovers += e.box.turnovers;
+    t.fga += e.box.fieldGoalAttempts;
+    t.fta += e.box.freeThrowAttempts;
+  }
+
+  if (t.games === 0) return null;
+
+  const shootingPossessions = t.fga + 0.44 * t.fta;
+
+  return {
+    gamesPlayed: t.games,
+    minutesPerGame: t.minutes / t.games,
+    pointsPerGame: t.points / t.games,
+    assistsPerGame: t.assists / t.games,
+    reboundsPerGame: t.rebounds / t.games,
+    blocksPerGame: t.blocks / t.games,
+    stealsPerGame: t.steals / t.games,
+    foulsPerGame: t.fouls / t.games,
+    turnoversPerGame: t.turnovers / t.games,
+    trueShootingPercentage:
+      shootingPossessions > 0 ? t.points / (2 * shootingPossessions) : 0,
+  };
 }
 
 /**

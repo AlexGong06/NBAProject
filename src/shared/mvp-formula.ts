@@ -3,26 +3,40 @@
 // Total Value      = Availability * (0.5 Win Contribution + 0.5 Total Stats)
 // Availability     = Player Games / Team Games
 // Win Contribution = Level of Impact * Quality of Impact
-// Level of Impact  = (Team Wins/Team Games) * (Minutes Per Game/48) * (Usage Rate/100)
-// Quality of Impact= 0.4(VORP + Win Share) + 0.2(Box Plus Minus)
+// Level of Impact  = (Team Wins/Team Games) * (Minutes Per Game/48) * Usage
+// Quality of Impact= 0.4(PIE * 100) + 0.2(Net Rating)
 // Total Stats      = (Points * True Shooting % + 1.5(Assists) + 1.2(Rebounds)
 //                     + 3(Blocks) + 3(Steals) - Fouls - Turnovers) / 25
 //
-// Top 10 MVP candidates: https://www.basketball-reference.com/friv/mvp.html
+// ── Scale: what is a fraction and what is not ────────────────────────────────
+//
+// Inputs come from the NBA stats API and are stored EXACTLY as received, so a
+// stored row can always be diffed against the source. That means the formula
+// owns every scaling decision, and they are not uniform:
+//
+//     usageRate                0.288   used directly, no division
+//     pie                      0.214   scaled by 100 inside the formula
+//     trueShootingPercentage   0.625   used as a decimal, unscaled
+//     netRating               10.740   already points per 100, unscaled
+//
+// Applying one rule to all four is the failure this arrangement exists to
+// prevent: multiplying true shooting by 100 inflates Total Stats sixty-fold and
+// still produces a leaderboard that looks entirely reasonable.
 //
 // ── Why availability multiplies the whole score ──────────────────────────────
 //
-// Every other term is a rate. Minutes per game, usage, and all seven Total Stats
-// inputs are computed over games PLAYED, so none of them can tell a player who
-// appeared 25 times from one who appeared 55. Total Stats is also the larger
-// half. Putting availability inside Level of Impact left a player available for
-// 45% of his team's games scoring 72% of an ever-present peer — a milder penalty
-// than simply pro-rating him. At the top, that becomes 38%.
+// Every other term is a rate. Minutes per game, usage, PIE, net rating and all
+// seven Total Stats inputs are computed over games PLAYED, so none of them can
+// tell a player who appeared 25 times from one who appeared 55. Total Stats is
+// also the larger half. Putting availability inside Level of Impact left a
+// player available for 45% of his team's games scoring 72% of an ever-present
+// peer — a milder penalty than simply pro-rating him. At the top, that becomes
+// 38%.
 //
-// So absence is penalised twice, deliberately: VORP and Win Shares are
-// cumulative and already stop accruing while a player sits, and availability
-// compounds that. Harsher than proportional, which is how MVP voting treats
-// missed games.
+// Availability is now the ONLY term that notices absence. Under the previous
+// formula VORP was cumulative and froze while a player sat, so absence was
+// penalised twice; PIE and net rating are both rates and do not accrue. That
+// makes this multiplier load-bearing rather than reinforcing.
 //
 // ── Why this file has no imports ─────────────────────────────────────────────
 //
@@ -50,10 +64,18 @@ export type ScoringInput = {
   teamGamesPlayed: number;
   gamesPlayed: number;
   minutesPerGame: number;
+  /**
+   * Usage as the NBA API returns it — a FRACTION (0.288), not a percentage.
+   * It is used as the usage factor directly, with no division.
+   */
   usageRate: number;
-  valueOverReplacement: number;
-  winShare: number;
-  boxPlusMinus: number;
+  /**
+   * Player Impact Estimate, also a fraction (0.214). Scaled by 100 inside the
+   * formula so it reaches the same magnitude as net rating.
+   */
+  pie: number;
+  /** Offensive rating minus defensive rating, already points per 100. */
+  netRating: number;
   pointsPerGame: number;
   assistsPerGame: number;
   reboundsPerGame: number;
@@ -120,16 +142,26 @@ export function scoreBreakdown(player: ScoringInput): Breakdown {
 
   const minutesFactor = num(player.minutesPerGame) / 48;
 
-  // Usage arrives from Basketball Reference as a percentage (30.1, not 0.301);
-  // true shooting arrives as a decimal (0.662, not 66.2). Mixing the two
-  // conventions is a 100x error that still produces a plausible ranked list.
-  const usageFactor = num(player.usageRate) / 100;
+  // Usage is used with no division. The NBA API returns it as a fraction
+  // (0.288) which IS the factor; the old `/ 100` existed only because
+  // Basketball Reference returned 28.8. Dividing again is a 100x error that
+  // still produces a plausible ranked list.
+  const usageFactor = num(player.usageRate);
 
   const levelOfImpact = teamWinRatio * minutesFactor * usageFactor;
 
-  const qualityOfImpact =
-    0.4 * (num(player.valueOverReplacement) + num(player.winShare)) +
-    0.2 * num(player.boxPlusMinus);
+  // PIE also arrives as a fraction and is scaled by 100 here so it reaches the
+  // same magnitude as net rating. Left unscaled it would contribute under 4% of
+  // this term instead of ~80%, and the score would collapse into net rating
+  // with a rounding error attached.
+  //
+  // The `× 100` deliberately sits INSIDE the parentheses. Folding it into the
+  // coefficient as `40 * pie` is arithmetically identical but hides the
+  // 0.4-to-0.2 weighting, and a future retune to 0.5 would mean writing 50.
+  //
+  // True shooting is NOT scaled — it is used as a decimal in totalStats below.
+  // A blanket "multiply the fractions by 100" inflates that term sixty-fold.
+  const qualityOfImpact = 0.4 * (num(player.pie) * 100) + 0.2 * num(player.netRating);
 
   const winContribution = levelOfImpact * qualityOfImpact;
 

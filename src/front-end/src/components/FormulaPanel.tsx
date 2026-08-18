@@ -21,15 +21,22 @@ export default function FormulaPanel({ player, onClose }: Props) {
       id: 1,
       label: "Level of impact",
       value: fmt(b.levelOfImpact),
-      expr: "(wins / games) × (MPG / 48) × (USG% / 100)",
-      substituted: `(${player.teamWins} / ${player.teamGamesPlayed}) × (${player.minutesPerGame.toFixed(1)} / 48) × (${player.usageRate.toFixed(1)} / 100)`,
+      // Usage is stored as a fraction and used as the factor directly. This
+      // panel used to render "(28.8 / 100)" back when the stat came from
+      // Basketball Reference as a percentage; against NBA API data that same
+      // string reads "(0.3 / 100)" — a panel whose whole purpose is showing the
+      // working, showing the wrong working.
+      expr: "(wins / games) × (MPG / 48) × USG",
+      substituted: `(${player.teamWins} / ${player.teamGamesPlayed}) × (${player.minutesPerGame.toFixed(1)} / 48) × ${player.usageRate.toFixed(3)}`,
     },
     {
       id: 2,
       label: "Quality of impact",
       value: fmt(b.qualityOfImpact, 2),
-      expr: "0.4(VORP + WS) + 0.2(BPM)",
-      substituted: `0.4(${player.valueOverReplacement.toFixed(1)} + ${player.winShare.toFixed(1)}) + 0.2(${player.boxPlusMinus.toFixed(1)})`,
+      // The × 100 is shown rather than folded into the coefficient, because it
+      // is the step a reader is most likely to think is missing.
+      expr: "0.4(PIE × 100) + 0.2(NRTG)",
+      substituted: `0.4(${player.pie.toFixed(3)} × 100) + 0.2(${player.netRating.toFixed(1)})`,
     },
     {
       id: 3,
@@ -92,8 +99,9 @@ export default function FormulaPanel({ player, onClose }: Props) {
         </div>
 
         <p style={{ fontSize: 13, color: C.textDim, margin: "0 0 24px", textWrap: "pretty" }}>
-          Every scrape recomputes one number per player. Nothing is weighted by narrative,
-          award history or team market — only the box score and the team's record.
+          One number per player, recomputed from every game he had played by this date.
+          Nothing is weighted by narrative, award history or team market — only the box
+          score and the team's record.
         </p>
 
         {steps.map((s) => (
@@ -142,7 +150,7 @@ export default function FormulaPanel({ player, onClose }: Props) {
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: C.textDim, lineHeight: 1.7 }}>
             <li>Total Stats dominates the sum for high-usage scorers.</li>
             <li>Team record is a season ratio, not a rolling window.</li>
-            <li>Days the collector fails are gaps, never interpolated.</li>
+            <li>Season-to-date, so early dates rest on very few games.</li>
           </ul>
         </div>
       </div>

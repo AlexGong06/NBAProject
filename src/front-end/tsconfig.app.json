@@ -5,7 +5,11 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "types": ["vite/client"],
+    // "node" is here for the colocated *.test.ts files, which run under vitest
+    // in Node and read public/rankings.json off disk to prove the committed
+    // fixture still renders. Application code must not use these APIs — it runs
+    // in a browser, where they do not exist.
+    "types": ["vite/client", "node"],
     "skipLibCheck": true,
 
     /* Bundler mode */

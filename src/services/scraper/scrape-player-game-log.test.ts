@@ -15,6 +15,8 @@ import {
   gameLogUrl,
   gamesPlayedAsOf,
   gamesPlayedAtTeamGame,
+  parseMinutes,
+  seasonToDate,
   teamRecordAsOf,
   parseGameLog,
 } from "./scrape-player-game-log";
@@ -109,6 +111,73 @@ describe("parseGameLog", () => {
 
   it("returns nothing for a page with no regular-season table", () => {
     expect(parseGameLog("<html><body><p>nope</p></body></html>")).toEqual([]);
+  });
+});
+
+describe("parseMinutes", () => {
+  // The page reports playing time as "40:50", not a decimal. Reading it with
+  // Number() yields 40, discarding the seconds and shaving minutes per game
+  // across a whole season.
+  it("reads minutes and seconds", () => {
+    expect(parseMinutes("40:50")).toBeCloseTo(40 + 50 / 60, 6);
+    expect(parseMinutes("36:00")).toBe(36);
+    expect(parseMinutes("0:30")).toBeCloseTo(0.5, 6);
+  });
+
+  it("returns zero for blank or malformed input", () => {
+    expect(parseMinutes("")).toBe(0);
+    expect(parseMinutes("—")).toBe(0);
+  });
+});
+
+describe("seasonToDate", () => {
+  // Verified against the database: reconstructing Jokić's season-to-date
+  // averages for all 113 of his stored days reproduced the scraped values to
+  // within 0.069 across 1,017 field comparisons — entirely rounding, since
+  // Basketball Reference publishes these to one decimal.
+  it("reproduces the figures the scraper recorded", () => {
+    // Denver had played 55 games on 2-17-2026, per that stored row.
+    const s = seasonToDate(entries, 55)!;
+    expect(s.gamesPlayed).toBe(39);
+    expect(s.minutesPerGame).toBeCloseTo(34.3, 1);
+    expect(s.pointsPerGame).toBeCloseTo(28.7, 1);
+    expect(s.assistsPerGame).toBeCloseTo(10.7, 1);
+    expect(s.reboundsPerGame).toBeCloseTo(12.3, 1);
+    expect(s.turnoversPerGame).toBeCloseTo(3.7, 1);
+    expect(s.trueShootingPercentage).toBeCloseTo(0.699, 3);
+  });
+
+  // Averages are over games PLAYED, matching Basketball Reference. Counting a
+  // missed game as a zero would drag every average down in proportion to how
+  // injured a player was — inventing a second, hidden availability penalty on
+  // top of the explicit one.
+  it("averages over games played, not games listed", () => {
+    const s = seasonToDate(entries, 82)!;
+    expect(s.gamesPlayed).toBe(65); // not 82
+  });
+
+  // True shooting comes from season totals, so a two-shot night cannot weigh
+  // the same as a twenty-shot one.
+  it("computes true shooting from totals, not by averaging percentages", () => {
+    const s = seasonToDate(entries, 82)!;
+    expect(s.trueShootingPercentage).toBeGreaterThan(0.5);
+    expect(s.trueShootingPercentage).toBeLessThan(0.8);
+  });
+
+  // Before his first appearance there is no average, and a zero would read as
+  // a real one.
+  it("returns null before the player has played", () => {
+    expect(seasonToDate(entries, 0)).toBeNull();
+  });
+
+  it("grows monotonically in games played", () => {
+    let prev = 0;
+    for (let tg = 1; tg <= 82; tg++) {
+      const s = seasonToDate(entries, tg);
+      if (!s) continue;
+      expect(s.gamesPlayed).toBeGreaterThanOrEqual(prev);
+      prev = s.gamesPlayed;
+    }
   });
 });
 

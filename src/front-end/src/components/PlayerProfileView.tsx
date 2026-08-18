@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { C, LEAGUE_NOTES, deltaLabel, fmt, initials, label, statList, tabular } from "../theme";
 import { mainChart } from "../charts";
 import type { ChartMode } from "../charts";
-import type { DataSource } from "../data/types";
+import type { DataSource, PlayerSeason } from "../data/types";
 import { ArrowLeft, ExternalIcon, HoverButton } from "./ui";
 
 type Props = {
@@ -29,9 +29,74 @@ export default function PlayerProfileView({
   const [mode, setMode] = useState<ChartMode>("rank");
   const [range, setRange] = useState(14);
 
-  const p = D.findPlayer(playerName) ?? D.PLAYERS[0];
+  // A player who never reached the loaded board is not in memory, so his season
+  // is fetched when his profile is opened.
+  //
+  // This used to read `D.findPlayer(playerName) ?? D.PLAYERS[0]`, which for any
+  // unknown name silently rendered the league leader's profile under the
+  // requested player's URL — a page that looks completely normal and is about
+  // the wrong person.
+  const local = D.findPlayer(playerName);
+  const [fetched, setFetched] = useState<PlayerSeason | null>(null);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "missing">("idle");
+
+  useEffect(() => {
+    if (local) {
+      setFetched(null);
+      setLoadState("idle");
+      return;
+    }
+    let alive = true;
+    setLoadState("loading");
+    D.loadPlayerSeason(playerName)
+      .then((season) => {
+        if (!alive) return;
+        setFetched(season);
+        setLoadState(season ? "idle" : "missing");
+      })
+      .catch(() => alive && setLoadState("missing"));
+    return () => { alive = false; };
+  }, [D, playerName, local]);
+
+  const p = local ?? fetched?.current;
+
+  if (!p) {
+    return (
+      <div style={{ padding: "28px 40px", display: "grid", placeItems: "center", minHeight: 320 }}>
+        <div style={{ textAlign: "center", maxWidth: 460 }}>
+          <div style={{ color: C.textFaint, fontSize: 13, marginBottom: 14 }}>
+            {loadState === "loading"
+              ? `Loading ${playerName}…`
+              : `No season data for ${playerName}.`}
+          </div>
+          {loadState === "missing" && (
+            <div style={{ color: C.textFaint, fontSize: 12, marginBottom: 16 }}>
+              The bundled fixture holds only the players who reached a top 25.
+              Run the API with <code>VITE_DATA=api</code> to reach the whole league.
+            </div>
+          )}
+          <HoverButton
+            onClick={onBack}
+            style={{
+              height: 32, padding: "0 14px", background: "transparent",
+              border: `1px solid ${C.lineStrong}`, borderRadius: 8,
+              color: C.textDim, cursor: "pointer", fontSize: 13,
+            }}
+            hoverStyle={{ color: C.text, borderColor: C.accentDeep }}
+          >
+            Back to rankings
+          </HoverButton>
+        </div>
+      </div>
+    );
+  }
+
   const todayRows = D.rankings(D.TODAY_KEY) ?? [];
-  const todayRow = todayRows.find((r) => r.player === p.player) ?? todayRows[0];
+  // No `?? todayRows[0]` fallback here either. A player outside the loaded
+  // board has no row in today's rankings, and defaulting to the first one would
+  // render the league leader's breakdown under this player's name. His own
+  // current row already carries every term.
+  const todayRow = todayRows.find((r) => r.player === p.player);
   // The row already carries every term of the formula — read it, never recompute.
   const b = todayRow ?? p;
   const totalHalf = b.winContribution + b.totalStats;
@@ -111,7 +176,7 @@ export default function PlayerProfileView({
               Rank today
             </div>
             <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular, color: C.accentPale }}>
-              {todayRow ? `#${todayRow.calculatedRank}` : "—"}
+              {`#${(todayRow ?? p).calculatedRank}`}
             </div>
             <div style={{ fontSize: 11, color: C.textFaint }}>
               {todayRow ? deltaLabel(todayRow.delta) : ""}
@@ -122,7 +187,7 @@ export default function PlayerProfileView({
               MVP value
             </div>
             <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular }}>
-              {todayRow ? fmt(todayRow.mvpValue) : fmt(b.mvpValue)}
+              {fmt((todayRow ?? p).mvpValue)}
             </div>
             <div style={{ fontSize: 11, color: C.textFaint }}>
               {peak ? `Peak #${peak} in 30 days` : ""}

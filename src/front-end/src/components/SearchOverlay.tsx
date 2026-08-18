@@ -12,22 +12,29 @@ type Props = {
 };
 
 export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer }: Props) {
+  // Search covers ROSTER — the whole league — not the loaded board.
+  //
+  // This used to filter `rankings(TODAY_KEY)`, which is a single date's top N,
+  // so searching found about 25 of 582 players. Everyone else was in the
+  // database and simply unreachable from the UI.
+  //
+  // Ranks come from position in ROSTER, which the API returns ordered by score
+  // on the most recent date. Rank is still never read off a stored field.
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = D.rankings(D.TODAY_KEY) ?? [];
-    return rows
-      .filter(
-        (p) =>
-          !q ||
-          p.player.toLowerCase().includes(q) ||
-          p.team.toLowerCase().includes(q) ||
-          (D.TEAMS[p.team] ?? "").toLowerCase().includes(q),
-      )
+    return D.ROSTER.filter(
+      (p) =>
+        !q ||
+        p.player.toLowerCase().includes(q) ||
+        p.team.toLowerCase().includes(q) ||
+        (D.TEAMS[p.team] ?? "").toLowerCase().includes(q),
+    )
+      .slice(0, 60) // 582 rows is a scroll, not a result list
       .map((p) => ({
         id: p.player,
         player: p.player,
         initials: initials(p.player),
-        rank: `#${p.calculatedRank}`,
+        rank: `#${D.ROSTER.indexOf(p) + 1}`,
         meta: [D.TEAMS[p.team] ?? p.team, p.pos, `${p.pointsPerGame.toFixed(1)} PPG`]
           .filter(Boolean)
           .join(" · "),

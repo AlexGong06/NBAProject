@@ -13,7 +13,8 @@
 
 import { TEAMS } from "./teams";
 import type {
-  DataSource, DateInfo, Game, HistoryPoint, RankedPlayer, Snapshot, StoredRow,
+  DataSource, DateInfo, Game, HistoryPoint, PlayerSeason, RankedPlayer,
+  RosterEntry, Snapshot, StoredRow,
 } from "./types";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -69,7 +70,29 @@ function assertRowsAreComplete(rows: StoredRow[], source: string): void {
   );
 }
 
-export function buildDataSource(rows: StoredRow[], source: string): DataSource {
+/**
+ * Optional capabilities a source can supply beyond the rows themselves.
+ *
+ * The board is always a top N per date, so most of the league is absent from
+ * `rows` — 137 of 582 players reach a top 50 all season. A source that can
+ * reach further (the API) passes these in; the offline fixture cannot, and
+ * says so by omitting them.
+ */
+export type SourceExtras = {
+  /** Every player in the league, for search. Ordered best first. */
+  roster?: RosterEntry[];
+  /**
+   * Fetch one player's full season, ranks included. Resolves null when the
+   * player is unknown to the source.
+   */
+  fetchPlayerSeason?: (playerName: string) => Promise<RankedPlayer[] | null>;
+};
+
+export function buildDataSource(
+  rows: StoredRow[],
+  source: string,
+  extras: SourceExtras = {},
+): DataSource {
   if (!rows.length) throw new Error(`${source} returned no ranking rows`);
   assertRowsAreComplete(rows, source);
 
@@ -144,9 +167,26 @@ export function buildDataSource(rows: StoredRow[], source: string): DataSource {
     });
   };
 
+  /**
+   * Seasons fetched on demand for players the board never loaded.
+   *
+   * Declared before `history` because `history` consults it. Putting the cache
+   * here — rather than handing fetched points to the profile component — is
+   * what lets the charts, the peak-rank readout and anything added later work
+   * for these players without knowing they were fetched at all.
+   */
+  const seasonCache = new Map<string, PlayerSeason | null>();
+
   const history = (playerName: string, dateKey: string, days: number): HistoryPoint[] => {
     const end = dateIndex(dateKey);
     const start = Math.max(0, end - days + 1);
+
+    // A fetched season is already aligned to DATES, so the same window applies.
+    const fetched = seasonCache.get(playerName);
+    if (fetched && !SNAPSHOTS.some((s) => s.rows.some((r) => r.player === playerName))) {
+      return fetched.history.slice(start, end + 1);
+    }
+
     return SNAPSHOTS.slice(start, end + 1).map((s) => {
       const row = s.missing ? null : s.rows.find((r) => r.player === playerName);
       return {
@@ -177,9 +217,78 @@ export function buildDataSource(rows: StoredRow[], source: string): DataSource {
   // upcoming-games section stays empty rather than being invented.
   const nextGames = (): Game[] => [];
 
+  const findPlayer = (name: string) => PLAYERS.find((p) => p.player === name);
+
+  // ── Search index ─────────────────────────────────────────────────────────
+  //
+  // The supplied roster covers the whole league; the loaded board covers a top
+  // N. Anyone in the board is marked `loaded` so the UI knows their profile
+  // needs no fetch. Falling back to the loaded players alone is what the
+  // offline fixture gets — a smaller search, but an honest one.
+  const ROSTER: RosterEntry[] = extras.roster
+    ? extras.roster.map((entry) => ({ ...entry, loaded: !!findPlayer(entry.player) }))
+    : PLAYERS.map((p) => ({
+        player: p.player,
+        team: p.team,
+        pos: p.pos,
+        pointsPerGame: p.pointsPerGame,
+        mvpValue: p.mvpValue,
+        loaded: true,
+      }));
+
+  const loadPlayerSeason = async (playerName: string): Promise<PlayerSeason | null> => {
+    // Already in the board — answer from memory, no request.
+    const local = findPlayer(playerName);
+    if (local) {
+      return {
+        current: local,
+        history: history(playerName, TODAY_KEY, DATES.length),
+      };
+    }
+
+    if (seasonCache.has(playerName)) return seasonCache.get(playerName) ?? null;
+    if (!extras.fetchPlayerSeason) {
+      seasonCache.set(playerName, null);
+      return null;
+    }
+
+    const fetched = await extras.fetchPlayerSeason(playerName);
+    if (!fetched || fetched.length === 0) {
+      seasonCache.set(playerName, null);
+      return null;
+    }
+
+    // Index the fetched rows by date so history lines up with the calendar the
+    // rest of the app already built. Dates the player has no row for stay
+    // missing rather than being drawn as a drop to zero.
+    // `delta` is movement against the previous day, which only the board knows
+    // — the API sends a season, not a comparison. Default it to 0 so the type
+    // holds and the UI shows "even" rather than rendering `undefined`.
+    const withDelta = fetched.map((r) => ({ ...r, delta: r.delta ?? 0 }));
+    const byKey = new Map(withDelta.map((r) => [r.date, r]));
+    const season: PlayerSeason = {
+      current: withDelta.reduce((latest, r) =>
+        sortKey(r.date) > sortKey(latest.date) ? r : latest,
+      ),
+      history: DATES.map((date) => {
+        const row = byKey.get(date.key);
+        return {
+          date,
+          missing: !row,
+          rank: row ? row.calculatedRank : null,
+          score: row ? row.mvpValue : null,
+        };
+      }),
+    };
+
+    seasonCache.set(playerName, season);
+    return season;
+  };
+
   return {
     TEAMS,
     PLAYERS,
+    ROSTER,
     DATES,
     MISSING,
     TODAY_KEY,
@@ -189,7 +298,8 @@ export function buildDataSource(rows: StoredRow[], source: string): DataSource {
     nearestWithData,
     rankings,
     history,
-    findPlayer: (name) => PLAYERS.find((p) => p.player === name),
+    findPlayer,
+    loadPlayerSeason,
     nextGames,
   };
 }

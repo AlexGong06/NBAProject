@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { C } from "../theme";
 
 type HoverProps = {
   style?: CSSProperties;
@@ -49,6 +50,60 @@ export function HoverBox({
     >
       {children}
     </div>
+  );
+}
+
+/* ── Player headshot ─────────────────────────────────────────────────────── */
+
+/**
+ * A player's photo over his initials.
+ *
+ * The initials are rendered first and always, and the image sits on top of
+ * them. That ordering is the whole design: an id that yields no photo, a CDN
+ * that is slow, or an offline reload all end with the initials showing — never
+ * a broken-image glyph in a circle, and never a gap that shifts the layout
+ * while the photo loads.
+ *
+ * `src` comes from `headshotUrl()` and is null when no player id could be
+ * recovered from the row, in which case no request is made at all.
+ */
+export function Headshot({
+  src, initials, size, fontSize,
+}: {
+  src: string | null;
+  initials: string;
+  size: number;
+  fontSize: number;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <>
+      <span
+        style={{
+          position: "absolute", inset: 0, display: "grid", placeItems: "center",
+          fontSize, fontWeight: 500, color: C.textFaint,
+        }}
+      >
+        {initials}
+      </span>
+      {src && !failed && (
+        <img
+          src={src}
+          alt={initials}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          style={{
+            position: "absolute", inset: 0, width: size, height: size,
+            // The source is 260x190 and off-centre — the NBA crops these with
+            // the head high in a wide frame. `cover` plus a top-biased origin
+            // is what puts the face in the circle instead of the chin.
+            objectFit: "cover", objectPosition: "50% 12%",
+            display: "block", pointerEvents: "none",
+          }}
+        />
+      )}
+    </>
   );
 }
 

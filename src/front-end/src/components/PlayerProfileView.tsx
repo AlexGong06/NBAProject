@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
-import { C, LEAGUE_NOTES, deltaLabel, fmt, initials, label, statList, tabular } from "../theme";
+import { useEffect, useMemo, useState } from "react";
+import { C, LEAGUE_NOTES, fmt, initials, label, statList, tabular } from "../theme";
 import { mainChart } from "../charts";
 import type { ChartMode } from "../charts";
-import type { DataSource, PlayerSeason } from "../data/types";
-import { ArrowLeft, ExternalIcon, HoverButton } from "./ui";
+import type { DataSource, FieldWindow, PlayerSeason } from "../data/types";
+import { headshotUrl } from "../data/headshot";
+import ScrapeRibbon from "./ScrapeRibbon";
+import {
+  ArrowLeft, ChevronLeft, ChevronRight, ExternalIcon, Headshot, HoverButton,
+} from "./ui";
 
 type Props = {
   D: DataSource;
   playerName: string;
   dateKey: string;
+  onPickDate: (key: string) => void;
   onBack: () => void;
   onOpenPlayer: (name: string) => void;
   onTogglePanel: () => void;
@@ -23,42 +28,88 @@ const MODES: { id: ChartMode; label: string }[] = [
 
 const RANGES = [7, 14, 30];
 
+/** Players either side of this one in the Field position rail. */
+const FIELD_WINDOW = 10;
+
+/** How many of those neighbours the field chart plots either side of him. */
+const FIELD_CHART_NEIGHBOURS = 2;
+
 export default function PlayerProfileView({
-  D, playerName, dateKey, onBack, onOpenPlayer, onTogglePanel, onToast,
+  D, playerName, dateKey, onPickDate, onBack, onOpenPlayer, onTogglePanel, onToast,
 }: Props) {
   const [mode, setMode] = useState<ChartMode>("rank");
   const [range, setRange] = useState(14);
 
-  // A player who never reached the loaded board is not in memory, so his season
-  // is fetched when his profile is opened.
+  // The season is always fetched, even for a player already in the board.
   //
-  // This used to read `D.findPlayer(playerName) ?? D.PLAYERS[0]`, which for any
-  // unknown name silently rendered the league leader's profile under the
-  // requested player's URL — a page that looks completely normal and is about
-  // the wrong person.
-  const local = D.findPlayer(playerName);
-  const [fetched, setFetched] = useState<PlayerSeason | null>(null);
-  const [loadState, setLoadState] = useState<"idle" | "loading" | "missing">("idle");
+  // Board membership used to be treated as "we have his season", but the board
+  // is a top N per date: a player who cracked it once, on a one-game sample in
+  // November, was served that single row as his whole career here. His November
+  // rank appeared as his current rank and his chart had one point in it.
+  //
+  // Nor is there a `?? D.PLAYERS[0]` fallback anywhere below. That silently
+  // rendered the league leader's profile under an unknown player's URL — a page
+  // that looks completely normal and is about the wrong person.
+  const [season, setSeason] = useState<PlayerSeason | null>(null);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "missing">("loading");
 
   useEffect(() => {
-    if (local) {
-      setFetched(null);
-      setLoadState("idle");
-      return;
-    }
     let alive = true;
+    setSeason(null);
     setLoadState("loading");
     D.loadPlayerSeason(playerName)
-      .then((season) => {
+      .then((loaded) => {
         if (!alive) return;
-        setFetched(season);
-        setLoadState(season ? "idle" : "missing");
+        setSeason(loaded);
+        setLoadState(loaded ? "ready" : "missing");
       })
       .catch(() => alive && setLoadState("missing"));
     return () => { alive = false; };
-  }, [D, playerName, local]);
+  }, [D, playerName]);
 
-  const p = local ?? fetched?.current;
+  // Where he sits on the selected date, and who is next to him. Refetched when
+  // the date changes — that is the whole point of the date picker.
+  const [field, setField] = useState<FieldWindow | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setField(null);
+    D.fieldAround(playerName, dateKey, FIELD_WINDOW)
+      .then((f) => alive && setField(f))
+      .catch(() => alive && setField(null));
+    return () => { alive = false; };
+  }, [D, playerName, dateKey]);
+
+  const fieldNames = useMemo(() => {
+    if (!field) return [];
+    const i = field.rows.findIndex((r) => r.player === playerName);
+    if (i === -1) return [playerName];
+    const start = Math.max(0, i - FIELD_CHART_NEIGHBOURS);
+    return field.rows.slice(start, start + FIELD_CHART_NEIGHBOURS * 2 + 1).map((r) => r.player);
+  }, [field, playerName]);
+
+  // Neighbours' seasons are only loaded when the field chart is actually shown.
+  // Each is another request, and the rank and value modes have no use for them.
+  //
+  // The counter is never read — bumping it exists only to re-render once they
+  // land. The chart reads those seasons through `D.history`, which is
+  // synchronous and cache-backed, so nothing else would tell React the data
+  // arrived.
+  const [, setCastLoaded] = useState(0);
+
+  useEffect(() => {
+    if (mode !== "field" || fieldNames.length === 0) return;
+    let alive = true;
+    Promise.all(fieldNames.map((n) => D.loadPlayerSeason(n).catch(() => null)))
+      .then(() => alive && setCastLoaded((n) => n + 1));
+    return () => { alive = false; };
+  }, [D, mode, fieldNames]);
+
+  // Every number on this page comes from the row for the selected date. Rank is
+  // the exception — that comes from `field`, which knows how large a field it
+  // measured against and whether that field was the whole league.
+  const row = D.rowFor(playerName, dateKey);
+  const p = row ?? season?.current ?? D.findPlayer(playerName) ?? null;
 
   if (!p) {
     return (
@@ -91,24 +142,36 @@ export default function PlayerProfileView({
     );
   }
 
-  const todayRows = D.rankings(D.TODAY_KEY) ?? [];
-  // No `?? todayRows[0]` fallback here either. A player outside the loaded
-  // board has no row in today's rankings, and defaulting to the first one would
-  // render the league leader's breakdown under this player's name. His own
-  // current row already carries every term.
-  const todayRow = todayRows.find((r) => r.player === p.player);
   // The row already carries every term of the formula — read it, never recompute.
-  const b = todayRow ?? p;
-  const totalHalf = b.winContribution + b.totalStats;
+  //
+  // Note this is `row`, not `row ?? p`. On a date the player has no row for,
+  // `p` falls back to whatever row identifies him, and printing that row's
+  // figures under this date's heading is the same category of error as the
+  // stale rank: a page that says "no data" in one corner and quotes numbers in
+  // the other. Every stat block below is gated on `row` instead.
+  const b = row;
+  const totalHalf = b ? b.winContribution + b.totalStats : 0;
 
-  const hist = D.history(p.player, D.TODAY_KEY, 30).filter((x) => x.rank != null);
-  const peak = hist.length ? Math.min(...hist.map((x) => x.rank as number)) : null;
+  const dateIdx = D.dateIndex(dateKey);
+  const date = D.DATES[dateIdx];
+  const stepDate = (by: number) => {
+    const next = D.DATES[dateIdx + by];
+    if (next) onPickDate(next.key);
+  };
 
-  const chart = mainChart(D, p.player, dateKey, range, mode);
+  // Peak within the window on screen, not a fixed 30 days measured from the end
+  // of the season. The chart and this figure now describe the same stretch of
+  // time, so they cannot contradict each other.
+  const windowRanks = D.history(p.player, dateKey, range)
+    .filter((x) => x.rank != null)
+    .map((x) => x.rank as number);
+  const peak = windowRanks.length ? Math.min(...windowRanks) : null;
+
+  const chart = mainChart(D, p.player, dateKey, range, mode, mode === "field" ? fieldNames : []);
   const games = D.nextGames(p.player);
 
-  const wcPct = ((b.winContribution / totalHalf) * 100).toFixed(1);
-  const tsPct = ((b.totalStats / totalHalf) * 100).toFixed(1);
+  const wcPct = b ? ((b.winContribution / totalHalf) * 100).toFixed(1) : "0";
+  const tsPct = b ? ((b.totalStats / totalHalf) * 100).toFixed(1) : "0";
 
   const segBtn = (active: boolean): React.CSSProperties => ({
     height: 30, padding: "0 12px",
@@ -143,11 +206,16 @@ export default function PlayerProfileView({
       >
         <div
           style={{
-            width: 132, height: 132, borderRadius: 999, background: C.raised,
-            border: `1px solid ${C.lineStrong}`, display: "grid", placeItems: "center",
+            position: "relative", width: 132, height: 132, borderRadius: 999,
+            background: C.raised, border: `1px solid ${C.lineStrong}`, overflow: "hidden",
           }}
         >
-          <span style={{ fontSize: 34, fontWeight: 500, color: C.textFaint }}>{initials(p.player)}</span>
+          <Headshot
+            src={headshotUrl(p)}
+            initials={initials(p.player)}
+            size={132}
+            fontSize={34}
+          />
         </div>
 
         <div style={{ minWidth: 0 }}>
@@ -161,25 +229,37 @@ export default function PlayerProfileView({
             {[
               p.pos,
               p.age != null ? `Age ${p.age}` : null,
-              `${p.teamWins}–${p.teamLosses}`,
-              `${p.gamesPlayed}/${p.teamGamesPlayed} games`,
-              `${p.minutesPerGame.toFixed(1)} MPG`,
+              // Position and age belong to the player; everything after belongs
+              // to the date, and is omitted when there is no row for it.
+              b ? `${b.teamWins}–${b.teamLosses}` : null,
+              b ? `${b.gamesPlayed}/${b.teamGamesPlayed} games` : null,
+              b ? `${b.minutesPerGame.toFixed(1)} MPG` : null,
             ]
               .filter(Boolean)
               .join(" · ")}
           </div>
         </div>
 
+        {/* Rank and value are as of the selected date, and say which date that
+            is. The old label read "Rank today" over whatever row happened to be
+            in memory — for a player the board saw once in November, that was a
+            four-month-old rank out of a 50-man field, presented as current. */}
         <div style={{ display: "flex", gap: 40, alignItems: "flex-start" }}>
           <div>
             <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textFaint }}>
-              Rank today
+              Rank on {date.short}
             </div>
             <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular, color: C.accentPale }}>
-              {`#${(todayRow ?? p).calculatedRank}`}
+              {row ? (field ? `#${field.rank}` : "…") : "—"}
             </div>
             <div style={{ fontSize: 11, color: C.textFaint }}>
-              {todayRow ? deltaLabel(todayRow.delta) : ""}
+              {!row
+                ? "No game data by this date"
+                : field
+                  ? field.complete
+                    ? `of ${field.fieldSize} players`
+                    : `of ${field.fieldSize} loaded — run the API for the full league`
+                  : ""}
             </div>
           </div>
           <div>
@@ -187,14 +267,70 @@ export default function PlayerProfileView({
               MVP value
             </div>
             <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular }}>
-              {fmt((todayRow ?? p).mvpValue)}
+              {row ? fmt(row.mvpValue) : "—"}
             </div>
             <div style={{ fontSize: 11, color: C.textFaint }}>
-              {peak ? `Peak #${peak} in 30 days` : ""}
+              {peak ? `Peak #${peak} in ${range} days` : ""}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── Date picker ─────────────────────────────────────────────────
+          The profile is a function of a date, so the date is a control, not a
+          caption. Same ribbon as the rankings view — one way to move through
+          the season, in both places. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 0 4px" }}>
+        <div style={{ display: "flex", border: `1px solid ${C.lineStrong}`, borderRadius: 8, overflow: "hidden" }}>
+          <HoverButton
+            onClick={() => stepDate(-1)}
+            title="Previous day"
+            style={{
+              height: 30, width: 32, display: "grid", placeItems: "center",
+              background: "transparent", border: 0, borderRight: `1px solid ${C.line}`,
+              color: dateIdx > 0 ? C.textDim : C.textGhost,
+              cursor: dateIdx > 0 ? "pointer" : "default",
+            }}
+            hoverStyle={dateIdx > 0 ? { color: C.text } : {}}
+          >
+            <ChevronLeft />
+          </HoverButton>
+          <HoverButton
+            onClick={() => stepDate(1)}
+            title="Next day"
+            style={{
+              height: 30, width: 32, display: "grid", placeItems: "center",
+              background: "transparent", border: 0,
+              color: dateIdx < D.DATES.length - 1 ? C.textDim : C.textGhost,
+              cursor: dateIdx < D.DATES.length - 1 ? "pointer" : "default",
+            }}
+            hoverStyle={dateIdx < D.DATES.length - 1 ? { color: C.text } : {}}
+          >
+            <ChevronRight />
+          </HoverButton>
+        </div>
+
+        <div style={{ fontSize: 15 }}>
+          {date.weekday}, {date.long}
+        </div>
+        {D.MISSING.has(dateKey) && (
+          <span style={{ fontSize: 11, color: C.textGhost }}>no games played</span>
+        )}
+
+        <HoverButton
+          onClick={() => onPickDate(D.TODAY_KEY)}
+          style={{
+            marginLeft: "auto", height: 30, padding: "0 12px",
+            background: "transparent", border: `1px solid ${C.lineStrong}`,
+            borderRadius: 8, color: C.textDim, fontSize: 12, cursor: "pointer",
+          }}
+          hoverStyle={{ color: C.text, borderColor: C.accentDeep }}
+        >
+          End of season
+        </HoverButton>
+      </div>
+
+      <ScrapeRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 40, paddingTop: 32 }}>
         <div style={{ minWidth: 0 }}>
@@ -258,9 +394,10 @@ export default function PlayerProfileView({
           </div>
 
           {/* ── Season averages ─────────────────────────────────────── */}
+          {b && (
           <div style={{ marginTop: 28 }}>
             <div style={{ ...label, marginBottom: 14 }}>
-              Season averages · {p.teamGamesPlayed} team games
+              Season averages · {b.teamGamesPlayed} team games
             </div>
             <div
               style={{
@@ -269,7 +406,7 @@ export default function PlayerProfileView({
                 borderRadius: 12, overflow: "hidden",
               }}
             >
-              {statList(p).map((s) => (
+              {statList(b).map((s) => (
                 <div key={s.label} style={{ background: C.surface, padding: "16px 14px" }}>
                   <div style={{ fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost }}>
                     {s.label}
@@ -284,6 +421,7 @@ export default function PlayerProfileView({
               ))}
             </div>
           </div>
+          )}
 
           {/* ── Schedule (fixture mode only; no API endpoint yet) ───── */}
           {games.length > 0 && (
@@ -356,6 +494,7 @@ export default function PlayerProfileView({
 
         {/* ── Profile rail ────────────────────────────────────────────── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {b && (
           <div
             style={{
               border: `1px solid ${C.lineStrong}`, borderRadius: 14,
@@ -396,11 +535,26 @@ export default function PlayerProfileView({
               See the math
             </HoverButton>
           </div>
+          )}
 
           <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, background: C.surface, padding: 22 }}>
-            <div style={{ ...label, marginBottom: 14 }}>Field position</div>
+            {/* The players immediately around him on the selected date, not the
+                league's leaders. This used to render the last date's top 50,
+                which for anyone outside it highlighted nobody and answered a
+                question the visitor had not asked. */}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={label}>Field position</div>
+              <div style={{ fontSize: 11, color: C.textGhost }}>{date.short}</div>
+            </div>
+
+            {!field && (
+              <div style={{ fontSize: 12, color: C.textFaint, padding: "8px 0" }}>
+                {row ? "Loading the field…" : `${p.player} has no row on this date.`}
+              </div>
+            )}
+
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {todayRows.map((r) => {
+              {(field?.rows ?? []).map((r) => {
                 const isSel = r.player === p.player;
                 return (
                   <HoverButton

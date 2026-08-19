@@ -61,6 +61,54 @@ export function rankGeometry(
   };
 }
 
+/**
+ * The rank window to draw, given every series that will be plotted.
+ *
+ * The axis used to be hardcoded to #1-#8, which was fine while only the top
+ * twenty were reachable. Now that any of 582 players can be opened, a fixed
+ * top-8 axis draws everyone else below the bottom edge — a chart that is
+ * completely empty, which reads as "no data" rather than "off the scale".
+ *
+ * Contenders keep the familiar #1-#8 view so the leaderboard's charts are
+ * unchanged; anyone below that gets a window around his own range, which is
+ * where his movement actually is. Taking every series at once is what lets the
+ * field view frame a player against his neighbours instead of against #1.
+ */
+export function rankDomain(series: HistoryPoint[][]): { lo: number; hi: number } {
+  const ranks: number[] = [];
+  for (const points of series) {
+    for (const p of points) if (p.rank != null) ranks.push(p.rank);
+  }
+  if (ranks.length === 0) return { lo: 1, hi: 8 };
+
+  const best = Math.min(...ranks);
+  const worst = Math.max(...ranks);
+  if (worst <= 8) return { lo: 1, hi: 8 };
+
+  const margin = Math.max(1, Math.ceil((worst - best) * 0.15));
+  return { lo: Math.max(1, best - margin), hi: worst + margin };
+}
+
+/**
+ * Horizontal rank lines for a domain.
+ *
+ * Eight evenly spaced lines for the top-8 view, five otherwise — enough to read
+ * a wide range without crowding the labels. The Set is not decoration: a narrow
+ * window like #181-#184 rounds several of the five fractions onto the same
+ * rank, and without it the chart draws "#182" twice on top of itself.
+ */
+function rankGrid(lo: number, hi: number, w: number, h: number, pad: Pad): GridLine[] {
+  const ranks =
+    lo === 1 && hi === 8
+      ? [1, 2, 3, 4, 5, 6, 7, 8]
+      : [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(lo + ((hi - lo) * i) / 4)))];
+
+  return ranks.map((r) => {
+    const y = pad.t + ((r - lo) * (h - pad.t - pad.b)) / Math.max(1, hi - lo);
+    return { id: r, y, ty: y + 4, x1: pad.l, x2: w - pad.r, label: `#${r}` };
+  });
+}
+
 /** Small inline rank trace for a table row. */
 export function sparkline(D: DataSource, name: string, dateKey: string, w: number, h: number) {
   const pts = D.history(name, dateKey, 14);
@@ -100,9 +148,18 @@ export function bumpChart(D: DataSource, dateKey: string) {
 
 export type ChartMode = "rank" | "score" | "field";
 
-/** The profile's main chart. Three modes over the same window. */
+/**
+ * The profile's main chart. Three modes over the same window.
+ *
+ * `fieldNames` is the cast for field mode — the player and his nearest
+ * neighbours on `dateKey`, best first — because who is next to him is a
+ * property of the date and only the caller has fetched it. Ignored by the other
+ * two modes, and falling back to the player alone keeps the chart drawable
+ * while that fetch is still in flight.
+ */
 export function mainChart(
   D: DataSource, name: string, dateKey: string, days: number, mode: ChartMode,
+  fieldNames: string[] = [],
 ) {
   const w = 820, h = 300, pad: Pad = { l: 34, r: 56, t: 14, b: 56 };
   const out = {
@@ -132,22 +189,54 @@ export function mainChart(
   });
 
   if (mode === "field") {
-    const top = (D.rankings(D.TODAY_KEY) ?? []).slice(0, 5);
-    out.grid = [1, 2, 4, 6, 8].map((r) => {
-      const y = pad.t + ((r - 1) * (h - pad.t - pad.b)) / 7;
-      return { id: r, y, ty: y + 4, x1: pad.l, x2: w - pad.r, label: `#${r}` };
-    });
-    top.forEach((p, i) => {
-      const g = rankGeometry(D.history(p.player, dateKey, days), w, h, pad, 8);
-      const isSel = p.player === name;
+    // The player's own neighbourhood, not the league's leaders.
+    //
+    // This used to plot the top 5 of the latest date on a fixed #1-#8 axis,
+    // which on the profile of a #300 player was five strangers drawn above an
+    // empty chart. The people worth comparing him to are the ones he is
+    // actually next to.
+    const cast = fieldNames.length ? fieldNames : [name];
+    const series = cast.map((n) => D.history(n, dateKey, days));
+    const { lo, hi } = rankDomain(series);
+    out.grid = rankGrid(lo, hi, w, h, pad);
+
+    cast.forEach((who, i) => {
+      const g = rankGeometry(series[i], w, h, pad, hi, lo);
+      const isSel = who === name;
       const color = isSel ? C.accentBright : LINE_COLORS[Math.min(i + 1, 4)];
-      g.segments.forEach((s) => out.segments.push({ id: `${p.player}s${s.id}`, points: s.points, color, width: isSel ? 2.6 : 1.4 }));
-      g.gaps.forEach((s) => out.gaps.push({ ...s, id: `${p.player}g${s.id}`, color }));
+      g.segments.forEach((s) => out.segments.push({ id: `${who}s${s.id}`, points: s.points, color, width: isSel ? 2.6 : 1.4 }));
+      g.gaps.forEach((s) => out.gaps.push({ ...s, id: `${who}g${s.id}`, color }));
       const last = g.dots[g.dots.length - 1];
-      if (last) out.ends.push({ id: p.player, tx: w - pad.r + 10, ty: last.y + 4, color, label: p.team });
+      if (last) {
+        out.ends.push({
+          id: who,
+          tx: w - pad.r + 10,
+          ty: last.y + 4,
+          color,
+          label: D.rowFor(who, dateKey)?.team ?? who.split(" ").slice(-1)[0],
+        });
+      }
     });
+
+    // Push the end labels apart where they would overlap.
+    //
+    // The old top-5 view never needed this: ranks 1 through 5 are far apart on
+    // the axis. Neighbours are by definition adjacent, so on the last day they
+    // land within a rank or two of each other and their team abbreviations
+    // print on top of one another — unreadable exactly where the comparison
+    // matters most.
+    const LABEL_GAP = 11;
+    out.ends.sort((a, b) => a.ty - b.ty);
+    for (let i = 1; i < out.ends.length; i++) {
+      const overlap = out.ends[i - 1].ty + LABEL_GAP - out.ends[i].ty;
+      if (overlap > 0) out.ends[i].ty += overlap;
+    }
+
     out.title = "Rank vs the field";
-    out.subtitle = "Top 5 candidates, rank by day — dashed where the collector missed a day";
+    out.subtitle =
+      cast.length > 1
+        ? "This player and his nearest rivals, rank by day — dashed where the collector missed a day"
+        : "Loading the players around him…";
     return out;
   }
 
@@ -187,40 +276,10 @@ export function mainChart(
     return out;
   }
 
-  // The rank axis follows the player.
-  //
-  // It used to be hardcoded to #1-#8, which was fine while only the top twenty
-  // were reachable. Now that any of 582 players can be opened, a fixed top-8
-  // axis draws everyone else below the bottom edge — Joan Beringer at #384 got
-  // a chart that was completely empty, which reads as "no data" rather than
-  // "off the scale".
-  //
-  // Contenders keep the familiar #1-#8 view so the leaderboard's charts are
-  // unchanged; anyone below that gets a window around his own range, which is
-  // where his movement actually is.
-  const ranks = base.filter((p) => p.rank != null).map((p) => p.rank as number);
-  const best = ranks.length ? Math.min(...ranks) : 1;
-  const worst = ranks.length ? Math.max(...ranks) : 8;
-
-  let lo = 1;
-  let hi = 8;
-  if (worst > 8) {
-    const margin = Math.max(1, Math.ceil((worst - best) * 0.15));
-    lo = Math.max(1, best - margin);
-    hi = worst + margin;
-  }
-
+  // The rank axis follows the player — see rankDomain.
+  const { lo, hi } = rankDomain([base]);
   const g = rankGeometry(base, w, h, pad, hi, lo);
-  // Eight evenly spaced lines for the top-8 view, five otherwise — enough to
-  // read a wide range without crowding the labels.
-  const gridRanks =
-    hi === 8 && lo === 1
-      ? [1, 2, 3, 4, 5, 6, 7, 8]
-      : Array.from({ length: 5 }, (_, i) => Math.round(lo + ((hi - lo) * i) / 4));
-  out.grid = gridRanks.map((r) => {
-    const y = pad.t + ((r - lo) * (h - pad.t - pad.b)) / Math.max(1, hi - lo);
-    return { id: r, y, ty: y + 4, x1: pad.l, x2: w - pad.r, label: `#${r}` };
-  });
+  out.grid = rankGrid(lo, hi, w, h, pad);
   g.segments.forEach((s) => out.segments.push({ id: `s${s.id}`, points: s.points, color: C.accentBright, width: 2.6 }));
   g.gaps.forEach((s) => out.gaps.push({ ...s, id: `g${s.id}`, color: C.accentBright }));
   g.dots.forEach((d, i) => out.dots.push({ id: `d${i}`, x: d.x, y: d.y, r: i === g.dots.length - 1 ? 4.5 : 3, color: C.accentBright }));

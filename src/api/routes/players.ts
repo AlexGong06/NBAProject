@@ -72,20 +72,65 @@ playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
 
     // Rank is attached here, not stored — the same rule the board endpoints
     // follow. A player's position on a date is "how many players scored higher
-    // that day, plus one", which is an index-only count against
-    // { isoDate: 1, mvpValue: -1 } and needs none of the rows themselves.
+    // that day, plus one".
     //
     // This matters for players outside the loaded board. The profile chart
     // defaults to plotting rank, and someone who never reached a top 50 has no
     // rank the client could derive from what it holds — their chart would
-    // simply be empty. Measured at ~1.5-3s for a full season.
-    const ranks = await Promise.all(
-      results.map((row) =>
-        col.countDocuments({ isoDate: row.isoDate, mvpValue: { $gt: row.mvpValue } }),
-      ),
+    // simply be empty.
+    //
+    // ── Why one aggregation and not 164 counts ────────────────────────────
+    //
+    // This was a `Promise.all` of one `countDocuments` per date. Correct, and
+    // index-only, but 164 round trips: measured at 1.7-2.0s for a season, and
+    // the profile's field mode asks for five players at once, which put five of
+    // those through one connection pool and took 8.1s.
+    //
+    // The rewrite is one pass that counts in the server. Note it groups with
+    // `$sum` and never `$push` — the memory limit that rules out aggregation
+    // elsewhere in this collection is hit by materialising documents, not by
+    // scanning them, so counting stays well inside it.
+    const threshold: Record<string, number> = {};
+    for (const row of results) threshold[row.isoDate] = row.mvpValue;
+
+    const counts = await col
+      .aggregate([
+        { $match: { isoDate: { $in: Object.keys(threshold) } } },
+        {
+          $group: {
+            _id: "$isoDate",
+            better: {
+              $sum: {
+                $cond: [
+                  {
+                    $gt: [
+                      "$mvpValue",
+                      // The player's own score on the date of the row being
+                      // examined. `$literal` keeps the map a value rather than
+                      // letting Mongo read the ISO keys as field paths.
+                      { $getField: { field: "$isoDate", input: { $literal: threshold } } },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ])
+      .toArray();
+
+    const betterByDate = new Map<string, number>(
+      counts.map((c: { _id: string; better: number }) => [c._id, c.better]),
     );
 
-    res.json(results.map((row, i) => ({ ...row, calculatedRank: ranks[i] + 1 })));
+    res.json(
+      results.map((row) => ({
+        ...row,
+        calculatedRank: (betterByDate.get(row.isoDate) ?? 0) + 1,
+      })),
+    );
   } catch (err) {
     logger.error(err);
     res.status(500).send("Server error");

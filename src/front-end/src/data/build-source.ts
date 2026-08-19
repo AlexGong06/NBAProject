@@ -13,8 +13,8 @@
 
 import { TEAMS } from "./teams";
 import type {
-  DataSource, DateInfo, Game, HistoryPoint, PlayerSeason, RankedPlayer,
-  RosterEntry, Snapshot, StoredRow,
+  DataSource, DateInfo, FieldWindow, Game, HistoryPoint, PlayerSeason,
+  RankedPlayer, RosterEntry, Snapshot, StoredRow,
 } from "./types";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -86,6 +86,19 @@ export type SourceExtras = {
    * player is unknown to the source.
    */
   fetchPlayerSeason?: (playerName: string) => Promise<RankedPlayer[] | null>;
+  /**
+   * Fetch one date's field around a player, ranked against the whole league.
+   *
+   * The board cannot answer this. It is a top N, so it knows where a player
+   * stands only on the dates he was in the top N — and reporting a position
+   * within 50 loaded rows as a league rank is precisely the failure this
+   * replaces.
+   */
+  fetchFieldAround?: (
+    playerName: string,
+    dateKey: string,
+    window: number,
+  ) => Promise<FieldWindow | null>;
 };
 
 export function buildDataSource(
@@ -177,15 +190,36 @@ export function buildDataSource(
    */
   const seasonCache = new Map<string, PlayerSeason | null>();
 
+  /**
+   * Fetched season rows, player → date key → row. Backs the synchronous
+   * `rowFor`, which needs whole rows rather than the rank/score pairs a
+   * `HistoryPoint` carries.
+   */
+  const seasonRows = new Map<string, Map<string, RankedPlayer>>();
+
+  /**
+   * In-flight season fetches, so concurrent callers share one request.
+   *
+   * The chart's field mode asks for several players at once and the profile
+   * asks for one of them itself; without this they race and fetch the same
+   * season twice.
+   */
+  const inFlight = new Map<string, Promise<PlayerSeason | null>>();
+
   const history = (playerName: string, dateKey: string, days: number): HistoryPoint[] => {
     const end = dateIndex(dateKey);
     const start = Math.max(0, end - days + 1);
 
-    // A fetched season is already aligned to DATES, so the same window applies.
+    // A fetched season wins outright, and is already aligned to DATES so the
+    // same window applies.
+    //
+    // This used to defer to the board whenever the player appeared in it on any
+    // date at all. That is backwards: the board holds a player only on the days
+    // he made the top N, so for someone who cracked it once in November it
+    // returned a single point and 163 nulls — a chart that renders as an empty
+    // grid and reads as "no data" rather than "the board never saw him".
     const fetched = seasonCache.get(playerName);
-    if (fetched && !SNAPSHOTS.some((s) => s.rows.some((r) => r.player === playerName))) {
-      return fetched.history.slice(start, end + 1);
-    }
+    if (fetched) return fetched.history.slice(start, end + 1);
 
     return SNAPSHOTS.slice(start, end + 1).map((s) => {
       const row = s.missing ? null : s.rows.find((r) => r.player === playerName);
@@ -234,55 +268,141 @@ export function buildDataSource(
         pointsPerGame: p.pointsPerGame,
         mvpValue: p.mvpValue,
         loaded: true,
+        // Carried through so search results can show a headshot. The fixture
+        // has no `playerId`, but `profileUrl` embeds one — see headshot.ts.
+        playerId: p.playerId,
+        profileUrl: p.profileUrl,
       }));
 
+  /**
+   * A player's whole season, ranked against the whole league.
+   *
+   * ── Why board membership is not a shortcut ──────────────────────────────
+   *
+   * This used to return early whenever `findPlayer` hit, on the reasoning that
+   * a player already in memory needs no request. But `PLAYERS` holds each
+   * player's latest row *within the loaded board*, and the board is a top N per
+   * date. A player who reached the top 50 once — Gary Payton II did, on a
+   * one-game sample in November — was therefore served that single row as his
+   * season: his November rank shown as his current rank, out of a field of 50
+   * presented as the league, with a chart that had one point in it.
+   *
+   * So the season endpoint wins whenever the source has one. The board is the
+   * fallback, not the shortcut.
+   */
   const loadPlayerSeason = async (playerName: string): Promise<PlayerSeason | null> => {
-    // Already in the board — answer from memory, no request.
-    const local = findPlayer(playerName);
-    if (local) {
+    if (seasonCache.has(playerName)) return seasonCache.get(playerName) ?? null;
+
+    const pending = inFlight.get(playerName);
+    if (pending) return pending;
+
+    // Everything the board alone can offer: the days this player was in the top
+    // N, ranked within it. Honest for the offline fixture, which has no deeper
+    // source, and used only when there is no season to fetch.
+    const fromBoard = (): PlayerSeason | null => {
+      const local = findPlayer(playerName);
+      if (!local) return null;
       return {
         current: local,
-        history: history(playerName, TODAY_KEY, DATES.length),
+        history: SNAPSHOTS.map((s) => {
+          const row = s.missing ? null : s.rows.find((r) => r.player === playerName);
+          return {
+            date: s.date,
+            missing: s.missing,
+            rank: row ? row.calculatedRank : null,
+            score: row ? row.mvpValue : null,
+          };
+        }),
       };
-    }
-
-    if (seasonCache.has(playerName)) return seasonCache.get(playerName) ?? null;
-    if (!extras.fetchPlayerSeason) {
-      seasonCache.set(playerName, null);
-      return null;
-    }
-
-    const fetched = await extras.fetchPlayerSeason(playerName);
-    if (!fetched || fetched.length === 0) {
-      seasonCache.set(playerName, null);
-      return null;
-    }
-
-    // Index the fetched rows by date so history lines up with the calendar the
-    // rest of the app already built. Dates the player has no row for stay
-    // missing rather than being drawn as a drop to zero.
-    // `delta` is movement against the previous day, which only the board knows
-    // — the API sends a season, not a comparison. Default it to 0 so the type
-    // holds and the UI shows "even" rather than rendering `undefined`.
-    const withDelta = fetched.map((r) => ({ ...r, delta: r.delta ?? 0 }));
-    const byKey = new Map(withDelta.map((r) => [r.date, r]));
-    const season: PlayerSeason = {
-      current: withDelta.reduce((latest, r) =>
-        sortKey(r.date) > sortKey(latest.date) ? r : latest,
-      ),
-      history: DATES.map((date) => {
-        const row = byKey.get(date.key);
-        return {
-          date,
-          missing: !row,
-          rank: row ? row.calculatedRank : null,
-          score: row ? row.mvpValue : null,
-        };
-      }),
     };
 
-    seasonCache.set(playerName, season);
-    return season;
+    const load = async (): Promise<PlayerSeason | null> => {
+      const fetched = extras.fetchPlayerSeason
+        ? await extras.fetchPlayerSeason(playerName)
+        : null;
+
+      if (!fetched || fetched.length === 0) {
+        const board = fromBoard();
+        seasonCache.set(playerName, board);
+        return board;
+      }
+
+      // Index the fetched rows by date so history lines up with the calendar the
+      // rest of the app already built. Dates the player has no row for stay
+      // missing rather than being drawn as a drop to zero.
+      // `delta` is movement against the previous day, which only the board knows
+      // — the API sends a season, not a comparison. Default it to 0 so the type
+      // holds and the UI shows "even" rather than rendering `undefined`.
+      const withDelta = fetched.map((r) => ({ ...r, delta: r.delta ?? 0 }));
+      const byKey = new Map(withDelta.map((r) => [r.date, r]));
+      seasonRows.set(playerName, byKey);
+
+      const season: PlayerSeason = {
+        current: withDelta.reduce((latest, r) =>
+          sortKey(r.date) > sortKey(latest.date) ? r : latest,
+        ),
+        history: DATES.map((date) => {
+          const row = byKey.get(date.key);
+          return {
+            date,
+            missing: !row,
+            rank: row ? row.calculatedRank : null,
+            score: row ? row.mvpValue : null,
+          };
+        }),
+      };
+
+      seasonCache.set(playerName, season);
+      return season;
+    };
+
+    const request = load().finally(() => inFlight.delete(playerName));
+    inFlight.set(playerName, request);
+    return request;
+  };
+
+  /**
+   * The player's row on one date — his numbers, not his position.
+   *
+   * Rank deliberately does not come from here. A board row carries its rank
+   * within the loaded top N, which is not a league rank; `fieldAround` is what
+   * knows the difference and says so.
+   */
+  const rowFor = (playerName: string, dateKey: string): RankedPlayer | null => {
+    const fetched = seasonRows.get(playerName)?.get(dateKey);
+    if (fetched) return fetched;
+
+    const snap = snapshot(dateKey);
+    if (!snap || snap.missing) return null;
+    return snap.rows.find((r) => r.player === playerName) ?? null;
+  };
+
+  const fieldAround = async (
+    playerName: string,
+    dateKey: string,
+    window: number,
+  ): Promise<FieldWindow | null> => {
+    if (extras.fetchFieldAround) {
+      const field = await extras.fetchFieldAround(playerName, dateKey, window);
+      if (field) return field;
+    }
+
+    // Board fallback. `complete: false` is the important part — these ranks are
+    // positions within however many rows were loaded, and the UI has to be able
+    // to tell that apart from a rank out of the whole league.
+    const day = rankings(dateKey);
+    if (!day) return null;
+
+    const idx = day.findIndex((r) => r.player === playerName);
+    if (idx === -1) return null;
+
+    const start = Math.max(0, idx - window);
+    return {
+      rank: idx + 1,
+      fieldSize: day.length,
+      complete: false,
+      rows: day.slice(start, start + window * 2 + 1),
+    };
   };
 
   return {
@@ -300,6 +420,8 @@ export function buildDataSource(
     history,
     findPlayer,
     loadPlayerSeason,
+    fieldAround,
+    rowFor,
     nextGames,
   };
 }

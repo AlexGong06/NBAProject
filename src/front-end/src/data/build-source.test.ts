@@ -322,7 +322,11 @@ describe("searching and loading the rest of the league", () => {
     expect(D.ROSTER.every((r) => r.loaded)).toBe(true);
   });
 
-  it("answers from memory for a player already on the board", async () => {
+  // This used to assert the opposite — that a player already on the board needs
+  // no request — and that assumption is what produced the bug below. Being in
+  // the board means having been in a top N on some date; it does not mean the
+  // app holds that player's season.
+  it("still fetches the season for a player already on the board", async () => {
     let calls = 0;
     const D = buildDataSource(boardRows, "test", {
       roster,
@@ -330,8 +334,21 @@ describe("searching and loading the rest of the league", () => {
     });
 
     const season = await D.loadPlayerSeason("Star");
-    expect(season?.current.player).toBe("Star");
-    expect(calls).toBe(0); // no request for someone we already hold
+    expect(season?.current.player).toBe("Star"); // still answered
+    expect(calls).toBe(1);
+  });
+
+  // Falls back to the board when the source has nothing deeper, so the offline
+  // fixture keeps working rather than reporting every player as missing.
+  it("falls back to the board when the season fetch comes back empty", async () => {
+    const D = buildDataSource(boardRows, "test", {
+      roster,
+      fetchPlayerSeason: async () => null,
+    });
+
+    const season = await D.loadPlayerSeason("Star");
+    expect(season).not.toBeNull();
+    expect(season!.current.player).toBe("Star");
   });
 
   // The point of the whole feature: a player the board never loaded still gets
@@ -378,5 +395,155 @@ describe("searching and loading the rest of the league", () => {
     const D = buildDataSource(boardRows, "test", { roster });
 
     await expect(D.loadPlayerSeason("Benchwarmer")).resolves.toBeNull();
+  });
+});
+
+// ── The one-good-day player ────────────────────────────────────────────────
+//
+// Gary Payton II reached the top 50 exactly once, on a one-game sample in
+// November, and never again. That single row became his entire identity in the
+// app: it was the newest row the board held for him, so `findPlayer` returned
+// it, `loadPlayerSeason` treated it as his season and never fetched, and the
+// profile printed his November rank — a position within a 50-man board — as his
+// rank today, beside a chart with one point in it.
+//
+// Every assertion here is a symptom that shipped.
+describe("a player the board saw on only one date", () => {
+  const EARLY = "11-16-2025";
+  const LATE = "3-1-2026";
+
+  // Two dates of board. He is in the first and absent from the second.
+  const boardRows = [
+    row({ player: "Contender", date: EARLY, mvpValue: 2.0 }),
+    row({ player: "One Good Day", date: EARLY, mvpValue: 1.5, gamesPlayed: 1, teamGamesPlayed: 1 }),
+    row({ player: "Contender", date: LATE, mvpValue: 2.2 }),
+    row({ player: "Filler", date: LATE, mvpValue: 1.9 }),
+  ];
+
+  // What the API actually holds for him: a row on every date, ranked against
+  // the whole league rather than against the board.
+  const season = [
+    { ...row({ player: "One Good Day", date: EARLY, mvpValue: 1.5 }), calculatedRank: 20, delta: 0 },
+    { ...row({ player: "One Good Day", date: LATE, mvpValue: 0.31 }), calculatedRank: 337, delta: 0 },
+  ];
+
+  const source = () =>
+    buildDataSource(boardRows, "test", {
+      fetchPlayerSeason: async (name) => (name === "One Good Day" ? season : null),
+    });
+
+  it("fetches his season even though the board holds a row for him", async () => {
+    const D = source();
+    const loaded = await D.loadPlayerSeason("One Good Day");
+
+    expect(loaded).not.toBeNull();
+    // The board's newest row for him is the November one, at 1.5. The season's
+    // is March, at 0.31 — a very different player.
+    expect(loaded!.current.mvpValue).toBe(0.31);
+    expect(loaded!.current.calculatedRank).toBe(337);
+  });
+
+  it("reports his rank on the date asked for, not the last one the board saw", async () => {
+    const D = source();
+    await D.loadPlayerSeason("One Good Day");
+
+    expect(D.rowFor("One Good Day", LATE)!.calculatedRank).toBe(337);
+    expect(D.rowFor("One Good Day", EARLY)!.calculatedRank).toBe(20);
+  });
+
+  // The empty chart. `history` used to defer to the board for anyone who
+  // appeared in it at all, which for him meant one point and nulls everywhere
+  // else — a chart that renders as a blank grid and reads as "no data".
+  it("draws his whole season, not the single day the board caught", async () => {
+    const D = source();
+    await D.loadPlayerSeason("One Good Day");
+
+    const ranked = D.history("One Good Day", LATE, D.DATES.length).filter((h) => h.rank != null);
+    expect(ranked.map((h) => h.rank)).toEqual([20, 337]);
+  });
+
+  it("leaves players the board genuinely covers alone", async () => {
+    const D = source();
+    await D.loadPlayerSeason("One Good Day");
+
+    // No season to fetch for him, so the board answers — and still correctly.
+    expect(D.rowFor("Contender", LATE)!.mvpValue).toBe(2.2);
+    expect(D.rowFor("Contender", LATE)!.calculatedRank).toBe(1);
+  });
+
+  it("shares one request between concurrent callers", async () => {
+    let calls = 0;
+    const D = buildDataSource(boardRows, "test", {
+      fetchPlayerSeason: async (name) => {
+        calls++;
+        return name === "One Good Day" ? season : null;
+      },
+    });
+
+    // The field chart asks for several players at once while the profile is
+    // asking for one of them itself.
+    await Promise.all([
+      D.loadPlayerSeason("One Good Day"),
+      D.loadPlayerSeason("One Good Day"),
+      D.loadPlayerSeason("One Good Day"),
+    ]);
+    expect(calls).toBe(1);
+  });
+});
+
+// ── The field around a player ──────────────────────────────────────────────
+describe("fieldAround", () => {
+  const rows = [
+    row({ player: "A", mvpValue: 2.0 }),
+    row({ player: "B", mvpValue: 1.8 }),
+    row({ player: "C", mvpValue: 1.6 }),
+    row({ player: "D", mvpValue: 1.4 }),
+    row({ player: "E", mvpValue: 1.2 }),
+  ];
+
+  it("prefers the source's window, which is measured against the whole league", async () => {
+    const D = buildDataSource(rows, "test", {
+      fetchFieldAround: async () => ({
+        rank: 337,
+        fieldSize: 582,
+        complete: true,
+        rows: [{ ...row({ player: "C" }), calculatedRank: 337, delta: 0 }],
+      }),
+    });
+
+    const field = await D.fieldAround("C", "3-1-2026", 10);
+    expect(field!.rank).toBe(337);
+    expect(field!.fieldSize).toBe(582);
+    expect(field!.complete).toBe(true);
+  });
+
+  // Without a source that can reach the whole league, the board is all there
+  // is. `complete: false` is what stops the UI printing a position among five
+  // loaded rows as a rank among 582.
+  it("falls back to the board and marks the answer incomplete", async () => {
+    const D = buildDataSource(rows, "test");
+
+    const field = await D.fieldAround("C", "3-1-2026", 1);
+    expect(field!.complete).toBe(false);
+    expect(field!.rank).toBe(3);
+    expect(field!.fieldSize).toBe(5);
+    expect(field!.rows.map((r) => r.player)).toEqual(["B", "C", "D"]);
+  });
+
+  // At the top of the board the window slides down rather than being cut short,
+  // so the rail keeps its full height instead of collapsing to three rows for
+  // the league leader.
+  it("slides the window rather than truncating it at rank 1", async () => {
+    const D = buildDataSource(rows, "test");
+
+    const field = await D.fieldAround("A", "3-1-2026", 2);
+    expect(field!.rank).toBe(1);
+    expect(field!.rows.map((r) => r.player)).toEqual(["A", "B", "C", "D", "E"]);
+  });
+
+  it("returns null for a player with no row on that date", async () => {
+    const D = buildDataSource(rows, "test");
+
+    await expect(D.fieldAround("Nobody", "3-1-2026", 5)).resolves.toBeNull();
   });
 });

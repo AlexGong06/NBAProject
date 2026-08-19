@@ -2,9 +2,10 @@ import { useState } from "react";
 import { C, MONO, deltaLabel, deltaShort, fmt, initials, label, statList, tabular } from "../theme";
 import { bumpChart, sparkline } from "../charts";
 import type { DataSource, RankedPlayer } from "../data/types";
+import { headshotUrl } from "../data/headshot";
 import ScrapeRibbon from "./ScrapeRibbon";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, HoverBox, HoverButton, WarningIcon,
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Headshot, HoverBox, HoverButton, WarningIcon,
 } from "./ui";
 
 type Props = {
@@ -196,9 +197,12 @@ export default function RankingsView({
                   display: "grid", placeItems: "center", cursor: "pointer", overflow: "hidden",
                 }}
               >
-                <span style={{ fontSize: 26, fontWeight: 500, color: C.textFaint, letterSpacing: "0.02em" }}>
-                  {initials(hero.player)}
-                </span>
+                <Headshot
+                  src={headshotUrl(hero)}
+                  initials={initials(hero.player)}
+                  size={104}
+                  fontSize={26}
+                />
               </HoverBox>
 
               <div style={{ minWidth: 0 }}>
@@ -296,7 +300,12 @@ export default function RankingsView({
                     display: "grid", placeItems: "center", cursor: "pointer", overflow: "hidden",
                   }}
                 >
-                  <span style={{ fontSize: 14, fontWeight: 500, color: C.textFaint }}>{initials(p.player)}</span>
+                  <Headshot
+                    src={headshotUrl(p)}
+                    initials={initials(p.player)}
+                    size={52}
+                    fontSize={14}
+                  />
                   {hover === p.player && (
                     <div
                       style={{

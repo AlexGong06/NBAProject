@@ -17,6 +17,18 @@ const COLLECTION = "PlayerDailyValues";
  */
 const DEFAULT_TOP = 50;
 
+/** Neighbours either side of a player for `?around=`, when the caller does not say. */
+const DEFAULT_WINDOW = 10;
+
+/** Cap on `?window=`, so one request cannot ask for the whole league by accident. */
+const MAX_WINDOW = 50;
+
+function windowParam(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return DEFAULT_WINDOW;
+  return Math.min(n, MAX_WINDOW);
+}
+
 /**
  * Parse `?top=` into a row limit.
  *
@@ -87,14 +99,87 @@ dailyRankingsRouter.get("/", async (req, res) => {
   }
 });
 
+/**
+ * One date's field around one player.
+ *
+ * `GET /daily-mvp-rankings/:date?around=Gary%20Payton%20II&window=10`
+ *
+ * The board endpoints above answer "who leads on this date". This answers
+ * "where does *he* sit on this date", which is a different question and cannot
+ * be served by cutting a top N: 445 of 582 players never reach a top 50 all
+ * season, so for most of the league the board's answer is silence — or worse,
+ * the one November date they did crack it, read as their current standing.
+ *
+ * Note the response is an object, not the array the plain `:date` board returns.
+ * A rank is meaningless without the size of the field it was measured in, and
+ * the neighbours are only interpretable next to the player's own position, so
+ * all three travel together.
+ *
+ * Ranks are competition ranks — "one more than the number of players strictly
+ * ahead" — the same definition used by the per-player season endpoint in
+ * players.ts, so the two can never disagree about where somebody stands.
+ */
+async function fieldAround(db: any, date: string, player: string, window: number) {
+  const col = db.collection(COLLECTION);
+
+  const row = await col.findOne({ date, player });
+  if (!row) return null;
+
+  // Both counts are answered from the { date: 1, mvpValue: -1 } index without
+  // touching a document, and the find below walks that same index from an
+  // offset. Nothing is sorted in memory, which is the constraint this whole
+  // collection is queried under — see the note on the board endpoint.
+  const [better, fieldSize] = await Promise.all([
+    col.countDocuments({ date, mvpValue: { $gt: row.mvpValue } }),
+    col.countDocuments({ date }),
+  ]);
+
+  const rank = better + 1;
+  const start = Math.max(0, rank - 1 - window);
+
+  const rows = await col
+    .find({ date })
+    .sort({ mvpValue: -1 })
+    .skip(start)
+    .limit(window * 2 + 1)
+    .toArray();
+
+  return {
+    rank,
+    fieldSize,
+    complete: true,
+    rows: rows.map((r: any, i: number) => ({ ...r, calculatedRank: start + i + 1 })),
+  };
+}
+
 // GET /daily-mvp-rankings/:date?top=50
 // One date's board, best first. Date format is "M-D-YYYY", e.g. "2-17-2026".
+//
+// With `?around=<player>` this returns that player's neighbourhood instead of
+// the leaders — see fieldAround above for the shape and the reasoning.
 dailyRankingsRouter.get("/:date", async (req, res) => {
   const date = req.params.date;
   const top = topParam(req.query.top);
+  const around = typeof req.query.around === "string" ? req.query.around : null;
 
   try {
     const db = await getDb();
+
+    if (around) {
+      const field = await fieldAround(db, date, around, windowParam(req.query.window));
+      if (!field) {
+        // No row means he had not played his first game by this date. Every
+        // player gets a row on every date from his debut onward, so absence is
+        // a real answer, not a gap.
+        res.status(404).json({
+          message: `No row for ${around} on ${date}. Either the player is unknown or he had not debuted by this date.`,
+        });
+        return;
+      }
+      res.json(field);
+      return;
+    }
+
     const results = await db
       .collection(COLLECTION)
       .find({ date })

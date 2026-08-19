@@ -235,6 +235,11 @@ scoring pipeline).
 
 Day 1: phases 1–2. Day 2: phase 3–4. Day 3: buffer and polish.
 
+**Status: phases 1–5 complete.** The season is reconstructed, 83,054 rows sit in
+`PlayerDailyValues`, and all 582 players are searchable across 164 dates. The
+work below is what came after: the pipeline is right, and the front end is what
+is now wrong.
+
 ---
 
 ## Verification
@@ -275,6 +280,184 @@ These are the first actions on approval, not a later phase:
 `README.md` had been deleted from the working tree at the time and was rebuilt
 from scratch, so its pre-deletion state is not recoverable from git — the last
 commit holds only the older Basketball Reference version.
+
+---
+
+## Phase 6 — the profile page
+
+Shipping phases 1–5 made every player reachable, which immediately exposed that
+the profile page was never built for more than the top twenty. Three items,
+two of which turned out to be the same bug.
+
+### The root cause: the board is not the league
+
+`build-source.ts` builds `PLAYERS` from any row that ever appeared in the loaded
+top-50 board, and `findPlayer` treated membership in that list as *"we hold this
+player's season"*. That is false. The board is a top N per date; a season is 164
+dates deep and ranked against all 582.
+
+**Gary Payton II reached the top 50 exactly once in 164 dates** — on
+**2025-10-21, opening night**, off a single game. That is the early-season
+volatility this project treats as a feature, and it is exactly the case the
+board mishandles. That one row became his entire identity in the app.
+
+Measured against the live database, his October 21 row is
+`#20 · mvp 0.298 · 1/1 games · 1–0 · 12.1 MPG` — every figure in the reported
+screenshot, four months stale:
+
+| Symptom | Cause |
+|---|---|
+| "RANK TODAY #20" in April | `p.calculatedRank` from his opening-night row — a position within 50 loaded rows, not a league rank |
+| `1–0 · 1/1 games · 12.1 MPG` | same stale row |
+| An empty rank chart | `history()` deferred to the board for anyone in it, giving one point and 163 nulls |
+| Field position showing strangers | the rail rendered the *last* date's top 50, which he is not in |
+
+`loadPlayerSeason` never fetched his season, because `findPlayer` hit first.
+
+His true standing, from the new endpoint: **#199 of 582 on 2026-04-12** with
+73/82 games. On 2025-11-16 — the date the screenshot's chart window ended — he
+was #265 of 466. At no point after opening night was he anywhere near #20.
+
+### What changed
+
+**1. Player headshots.** `https://cdn.nba.com/headshots/nba/latest/260x190/{playerId}.png`
+— verified live, 200, ~15 KB. No new fetch, no download, no storage: the id is
+already in every row. The API projects `playerId`; the fixture drops it but
+keeps `profileUrl`, whose path embeds the same id, so `data/headshot.ts` reads
+whichever is present and headshots work offline too. A new `<Headshot>` in
+`ui.tsx` layers the image over the existing initials and falls back to them on
+error — players with no CDN photo show "GP", never a broken image. Wired into
+all four avatars: profile (132px), rankings hero (104px) and rows (52px), search
+(36px).
+
+**2. The profile is now a function of a date, not of "today".**
+
+- `loadPlayerSeason` no longer short-circuits on board membership. The season
+  endpoint wins whenever the source has one; the board is the fallback, not the
+  shortcut. This one change fixes the header, the chart and the peak.
+- `history()` prefers a fetched season outright.
+- New `rowFor(player, dateKey)` — every number on the page reads the row for the
+  selected date.
+- New `fieldAround(player, dateKey, window)`, backed by a new
+  `GET /daily-mvp-rankings/:date?around=<player>&window=N`. It returns the
+  player's true rank, the size of the field it was measured against, and his
+  neighbours — all three together, because a rank without its field size is
+  exactly the confusion being fixed. Ranks use the same
+  `countDocuments({ mvpValue: { $gt } }) + 1` definition as the per-player
+  season endpoint, so the two cannot disagree.
+- The header now reads **"Rank on Nov 16"** with **"of 582 players"** beneath
+  it. In fixture mode it says "of 25 loaded" instead — `FieldWindow.complete` is
+  what keeps a rank out of 25 from being read as a rank out of 582.
+- A date picker on the profile: prev/next chevrons, the date spelled out, and
+  the same `ScrapeRibbon` the rankings page uses.
+- The selected date moved out of React state and into the URL as `?date=`. Both
+  views are a function of a date; holding it in memory meant a profile could not
+  be linked to as it was being read, and that moving between board and profile
+  silently changed the day.
+
+**3. The chart follows the player.** `rankDomain()` is extracted and now takes
+every series being plotted, so the axis frames whatever is on screen. Field mode
+was the broken one — it drew the top 5 of the last date on a hardcoded #1–#8
+axis, which on a #300 player's profile is five strangers above an empty chart.
+It now plots him and his two nearest rivals either side, and their seasons are
+fetched only when field mode is actually selected.
+
+### Where phase 6 stands
+
+*Updated 2026-08-18. Code complete and verified against the live database; one
+item (headshots actually painting) needs a look in a normal browser.*
+
+**Done, and typechecking clean on both the front end and the backend:**
+
+| Area | Files |
+|---|---|
+| Headshots | `data/headshot.ts` (new), `components/ui.tsx`, and the four avatar sites |
+| The `around` endpoint | `api/routes/daily-mvp-rankings.ts` |
+| The board/season fix | `data/build-source.ts`, `data/types.ts`, `data/api.ts` |
+| Date-scoped profile | `components/PlayerProfileView.tsx` |
+| Date in the URL | `App.tsx` |
+| Chart domain + field mode | `charts.ts` |
+
+**Tests: 160 passing, up from 142.** Eighteen new, of which the ones that matter
+are a `describe("a player the board saw on only one date")` block reproducing
+the Gary Payton II shape directly — a player in the board on one date, with a
+full season behind him — and asserting each symptom above is gone.
+
+One existing test had to be **inverted rather than fixed**: it asserted
+*"answers from memory for a player already on the board — no request for someone
+we already hold"*. That assumption is the bug. It now asserts the opposite, with
+a comment saying why, so nobody reinstates the optimisation.
+
+**Verified by driving the real app** against the live database — a headless
+browser on the API source, then again on the fixture. This codebase produces
+plausible wrong answers and `#20` looked plausible for months, so the suite was
+never going to be the gate.
+
+| Check | Result |
+|---|---|
+| GPII on 2026-04-12 | **#199 of 582**, 73/82 games, 15.7 MPG — was #20, 1/1 games |
+| Scrub to 2025-10-21 | **#20 of 40 players** — correct, and only there |
+| Rank chart | continuous line, axis #195–#211, gap dashed — was an empty #1–#8 grid |
+| Field position | 21 rows, #189–#209, GPII highlighted at #199 |
+| Field mode | 5 lines, axis #134–#238, his rivals — not Jokić |
+| Jokić | #2 of 582, value 1.385, axis still #1–#8 — unchanged |
+| Fixture mode | renders with no database, says "#2 **of 25 loaded**" |
+| Fixture, no row for the date | stats omitted, not stale — see the defect below |
+| Console | no application errors in either mode |
+
+Two defects were found by looking rather than by testing, and both are fixed:
+
+1. **Field-mode end labels collided.** Neighbours converge by definition, so
+   their team abbreviations printed on top of each other at the right edge —
+   unreadable exactly where the comparison matters. The old top-5 view never hit
+   this because ranks 1–5 are far apart. Labels are now pushed apart to an 11px
+   minimum.
+2. **Stale stats leaked on a date with no row.** The header correctly said "no
+   game data by this date" while the meta line below it still printed
+   `1–0 · 1/1 games · 12.1 MPG` from the identifying row — the same
+   say-one-thing-show-another failure being fixed, in miniature. Every stat block
+   is now gated on the date's row; only name, team, position and age survive
+   without one.
+
+**Not verified: that a headshot actually paints.** The sandboxed browser cannot
+reach `cdn.nba.com` at all (`chrome-error`), though `curl` fetches the same URLs
+fine. What *is* verified: the id is derived correctly from both sources (the API's
+`playerId` and the fixture's `profileUrl` — the browser requested
+`260x190/203999.png` for Jokić in fixture mode, which has no `playerId` at all),
+the URL returns a real 14.8 KB PNG under `curl`, and the fallback works — every
+one of ~80 blocked requests degraded to initials with no broken image and no
+layout shift. **Confirm the photos in a normal browser.**
+
+### Deliberately not done
+
+- **The formula is untouched.** No recompute, no rebuild, no migration — every
+  number already exists in `PlayerDailyValues`.
+- **No rank is stored**, still. The fix was to ask the right question on read,
+  not to cache the answer.
+### The rank query was rewritten, after measuring
+
+Left alone at first, on the rule that an unmeasured optimisation is a guess. It
+was then measured, and it was slow — every profile now fetches a season, where
+before only the ~445 players outside the board did.
+
+`players.ts` was doing one `countDocuments` per date: correct and index-only,
+but 164 round trips. Field mode makes it worse, asking for five players at once
+through one connection pool.
+
+| | 164 counts | one aggregation |
+|---|---|---|
+| One season | 1.7–2.0s | **0.75s** |
+| Five at once (field mode) | 8.10s | **2.06s** |
+
+The replacement groups with `$sum` and never `$push` — the 100 MB limit that
+rules out aggregation elsewhere in this collection is hit by materialising
+documents, not by scanning them, so counting stays well inside it.
+
+**Verified equivalent, not just faster.** Ranks were captured from the old
+implementation for Jokić, Gary Payton II, Shai Gilgeous-Alexander, Harden and
+Wembanyama, then compared row by row against the new one: 816 date-rows,
+identical throughout. A faster ranking that ranks differently would be worse
+than the slow one.
 
 ---
 

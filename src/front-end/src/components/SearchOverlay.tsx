@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { C, fmt, initials } from "../theme";
 import type { DataSource } from "../data/types";
-import { HoverButton, SearchIcon } from "./ui";
+import { headshotUrl } from "../data/headshot";
+import { Headshot, HoverButton, SearchIcon } from "./ui";
 
 type Props = {
   D: DataSource;
@@ -34,6 +35,7 @@ export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer
         id: p.player,
         player: p.player,
         initials: initials(p.player),
+        headshot: headshotUrl(p),
         rank: `#${D.ROSTER.indexOf(p) + 1}`,
         meta: [D.TEAMS[p.team] ?? p.team, p.pos, `${p.pointsPerGame.toFixed(1)} PPG`]
           .filter(Boolean)
@@ -106,12 +108,12 @@ export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer
             >
               <span
                 style={{
-                  width: 36, height: 36, borderRadius: 999, background: C.raised,
-                  border: `1px solid ${C.lineStrong}`, display: "grid",
-                  placeItems: "center", fontSize: 11, color: C.textFaint,
+                  position: "relative", width: 36, height: 36, borderRadius: 999,
+                  background: C.raised, border: `1px solid ${C.lineStrong}`,
+                  display: "block", overflow: "hidden",
                 }}
               >
-                {r.initials}
+                <Headshot src={r.headshot} initials={r.initials} size={36} fontSize={11} />
               </span>
               <span style={{ fontSize: 12, color: C.textGhost, fontVariantNumeric: "tabular-nums" }}>
                 {r.rank}

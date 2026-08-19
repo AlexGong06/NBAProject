@@ -1,11 +1,18 @@
 // Shell for the MVP tracker.
 //
 // Routing is kept from the original app so a player profile has its own URL and
-// can be linked to. Everything else (selected date, search, the formula drawer)
-// is local UI state shared across both views.
+// can be linked to. Search and the formula drawer are local UI state shared
+// across both views.
+//
+// The selected date is not state — it lives in the URL as `?date=`. Both views
+// are a function of a date, and holding it in memory meant a profile could not
+// be linked to as it was being read, and that moving between the board and a
+// profile silently changed which day you were looking at.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BrowserRouter, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import {
+  BrowserRouter, Route, Routes, useNavigate, useParams, useSearchParams,
+} from "react-router-dom";
 import { DATA_MODE, loadDataSource } from "./data";
 import type { DataSource } from "./data/types";
 import { C, FONT } from "./theme";
@@ -22,9 +29,10 @@ function Shell() {
   const { playerName } = useParams();
   const decodedName = playerName ? decodeURIComponent(playerName) : null;
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [D, setD] = useState<DataSource | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [dateKey, setDateKey] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
@@ -35,9 +43,7 @@ function Shell() {
     let alive = true;
     loadDataSource()
       .then((src) => {
-        if (!alive) return;
-        setD(src);
-        setDateKey(src.TODAY_KEY);
+        if (alive) setD(src);
       })
       .catch((err: Error) => {
         if (alive) setLoadError(err.message);
@@ -70,12 +76,26 @@ function Shell() {
     toastTimer.current = window.setTimeout(() => setToast(""), 2200);
   }, []);
 
+  // The date rides along, so opening a player from the Nov 16 board lands on
+  // Nov 16 rather than silently jumping to the end of the season.
   const openPlayer = useCallback(
     (name: string) => {
       setSearchOpen(false);
-      navigate(`/player/${encodeURIComponent(name)}`);
+      const search = searchParams.toString();
+      navigate(`/player/${encodeURIComponent(name)}${search ? `?${search}` : ""}`);
     },
-    [navigate],
+    [navigate, searchParams],
+  );
+
+  const pickDate = useCallback(
+    (key: string) => {
+      const next = new URLSearchParams(searchParams);
+      next.set("date", key);
+      // `replace` so scrubbing the ribbon does not bury the previous page under
+      // a hundred history entries.
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
   );
 
   const page: React.CSSProperties = {
@@ -106,13 +126,19 @@ function Shell() {
     );
   }
 
-  if (!D || !dateKey) {
+  if (!D) {
     return (
       <div style={{ ...page, display: "grid", placeItems: "center" }}>
         <div style={{ color: C.textFaint, fontSize: 13 }}>Loading rankings…</div>
       </div>
     );
   }
+
+  // A `?date=` for a day outside the season — a stale link, a typo, a hand-edited
+  // URL — falls back to the latest date rather than rendering an empty board.
+  const requested = searchParams.get("date");
+  const dateKey =
+    requested && D.dateIndex(requested) >= 0 ? requested : D.TODAY_KEY;
 
   const view = decodedName ? "profile" : "rankings";
   const todayRows = D.rankings(D.TODAY_KEY) ?? [];
@@ -138,7 +164,7 @@ function Shell() {
           D={D}
           dateKey={dateKey}
           topN={TOP_N}
-          onPickDate={setDateKey}
+          onPickDate={pickDate}
           onOpenPlayer={openPlayer}
           onTogglePanel={() => setPanelOpen(true)}
         />
@@ -147,7 +173,8 @@ function Shell() {
           D={D}
           playerName={decodedName as string}
           dateKey={dateKey}
-          onBack={() => navigate("/")}
+          onPickDate={pickDate}
+          onBack={() => navigate(`/?date=${encodeURIComponent(dateKey)}`)}
           onOpenPlayer={openPlayer}
           onTogglePanel={() => setPanelOpen(true)}
           onToast={showToast}

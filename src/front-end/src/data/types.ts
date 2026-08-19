@@ -65,6 +65,16 @@ export type StoredRow = PlayerStats &
     /** ISO "YYYY-MM-DD" twin of `date`, sortable as text. */
     isoDate?: string;
     formulaVersion?: number;
+    /**
+     * The NBA's player id, and the nba.com profile link that embeds it.
+     *
+     * Optional because the two sources carry different subsets: the API returns
+     * `playerId` outright, while the committed fixture drops it and keeps only
+     * `profileUrl` — whose path contains the same id. `headshotUrl()` reads
+     * whichever is present, so headshots work offline and online alike.
+     */
+    playerId?: number;
+    profileUrl?: string;
   };
 
 /**
@@ -130,12 +140,36 @@ export type RosterEntry = {
   mvpValue: number;
   /** True when this player is in the loaded board and needs no extra fetch. */
   loaded: boolean;
+  /** Enough to build a headshot URL. See the note on StoredRow. */
+  playerId?: number;
+  profileUrl?: string;
 };
 
 /** A player's season, fetched on demand for someone outside the loaded board. */
 export type PlayerSeason = {
   current: RankedPlayer;
   history: HistoryPoint[];
+};
+
+/**
+ * The slice of one date's field surrounding a player.
+ *
+ * `rows` is the player with his neighbours above and below, each carrying its
+ * true rank within the whole date — not a position within this window.
+ *
+ * `complete` says whether those ranks are measured against the entire league.
+ * The API can answer for all 582; the offline fixture only holds a top 25, so
+ * it reports false and the UI can decline to print a rank it cannot stand
+ * behind. A rank out of 25 shown as a rank out of 582 is exactly the confusion
+ * this window exists to end.
+ */
+export type FieldWindow = {
+  /** The player's rank on this date. */
+  rank: number;
+  /** How many players have a row on this date — the "of N" in "#20 of N". */
+  fieldSize: number;
+  rows: RankedPlayer[];
+  complete: boolean;
 };
 
 /**
@@ -160,6 +194,30 @@ export type DataSource = {
    * profile behind it, and the UI has to say so rather than render blanks.
    */
   loadPlayerSeason(playerName: string): Promise<PlayerSeason | null>;
+  /**
+   * One date's field around a player, `window` rows either side.
+   *
+   * Separate from `rankings()` because that answers "who leads on this date",
+   * cut from the loaded board, while this answers "where does *he* sit" — a
+   * question the board cannot answer for the ~445 players it never loads.
+   * Returns null when the player has no row on that date, which for most of the
+   * league means he had not debuted yet.
+   */
+  fieldAround(
+    playerName: string,
+    dateKey: string,
+    window: number,
+  ): Promise<FieldWindow | null>;
+  /**
+   * A player's stored row on one specific date.
+   *
+   * The profile is a function of a date, so every number it prints comes from
+   * here. Reads the fetched season first and the loaded board second: the board
+   * holds a player only on the dates he cracked the top N, and treating one of
+   * those rows as his current form is how a one-game November spike came to be
+   * displayed as a season-long rank.
+   */
+  rowFor(playerName: string, dateKey: string): RankedPlayer | null;
   DATES: DateInfo[];
   MISSING: Set<string>;
   TODAY_KEY: string;

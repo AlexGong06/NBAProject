@@ -1,8 +1,9 @@
 // Live data source: the same shape, read from the Express API.
 //
-//   GET /daily-mvp-rankings?top=N        the board — top N players per date
-//   GET /players                         every player in the league, for search
-//   GET /players/:name/daily-mvp-rankings one player's full season, ranks included
+//   GET /daily-mvp-rankings?top=N         the board — top N players per date
+//   GET /players                          every player in the league, for search
+//   GET /players/:name/daily-mvp-rankings  one player's full season, ranks included
+//   GET /daily-mvp-rankings/:date?around=  one date's field around one player
 //
 // The board and the roster are fetched once at startup and indexed in memory,
 // so the component tree stays synchronous. Individual seasons are fetched only
@@ -17,7 +18,7 @@
 // rest on demand.
 
 import { buildDataSource } from "./build-source";
-import type { DataSource, RankedPlayer, RosterEntry, StoredRow } from "./types";
+import type { DataSource, FieldWindow, RankedPlayer, RosterEntry, StoredRow } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
 
@@ -52,6 +53,18 @@ export async function loadApiSource(): Promise<DataSource> {
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
       return (await res.json()) as RankedPlayer[];
+    },
+    // A 404 here means the player has no row on that date — he had not made his
+    // season debut. That is an answer, not a failure, so it resolves null and
+    // the profile says he had not played rather than showing a rank of nothing.
+    fetchFieldAround: async (playerName, dateKey, window) => {
+      const path =
+        `/daily-mvp-rankings/${encodeURIComponent(dateKey)}` +
+        `?around=${encodeURIComponent(playerName)}&window=${window}`;
+      const res = await fetch(`${API_BASE}${path}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+      return (await res.json()) as FieldWindow;
     },
   });
 }

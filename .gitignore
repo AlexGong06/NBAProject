@@ -37,3 +37,4 @@ backups/
 .venv*/
 __pycache__/
 *.pyc
+.gstack/

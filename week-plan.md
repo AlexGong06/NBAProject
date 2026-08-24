@@ -2,11 +2,14 @@
 
 ## Context
 
-The tracker currently scrapes Basketball Reference once a night for the top ~20
-scorers and copies their advanced metrics. Three problems: 15 days were lost
-permanently when the scraper failed, candidates are selected by points per game
-(the exact signal the project argues is misleading), and the most important half
-of the score is somebody else's arithmetic.
+*Written before the rebuild, in the present tense of the time. Phases 1–7 below
+are complete; this paragraph describes what the project used to be.*
+
+The tracker scraped Basketball Reference once a night for the top ~20 scorers
+and copied their advanced metrics. Three problems: 15 days were lost permanently
+when the scraper failed, candidates were selected by points per game (the exact
+signal the project argues is misleading), and the most important half of the
+score was somebody else's arithmetic.
 
 The data source is moving to the official NBA stats API, the formula's quality
 term becomes `0.4(PIE × 100) + 0.2(NR)`, and the 2025-26 season — complete, nothing
@@ -364,8 +367,8 @@ fetched only when field mode is actually selected.
 
 ### Where phase 6 stands
 
-*Updated 2026-08-18. Code complete and verified against the live database; one
-item (headshots actually painting) needs a look in a normal browser.*
+*Phase 6 is committed and shipped. Headshots were confirmed painting in a real
+browser; the sandbox that ran the checks could not reach `cdn.nba.com`.*
 
 **Done, and typechecking clean on both the front end and the backend:**
 
@@ -458,6 +461,100 @@ implementation for Jokić, Gary Payton II, Shai Gilgeous-Alexander, Harden and
 Wembanyama, then compared row by row against the new one: 816 date-rows,
 identical throughout. A faster ranking that ranks differently would be worse
 than the slow one.
+
+---
+
+## Phase 7 — front-end cleanup: the collector is gone
+
+Cleanup before the next round of features. Nearly all of it traces to one fact
+the front end never absorbed after phases 1–5: **there is no collector.** The
+season is rebuilt retroactively from the NBA stats API in a single pass. Nothing
+runs nightly, and no day's data ever "failed to arrive".
+
+### The ten gaps were never gaps
+
+The calendar days between Oct 21 and Apr 12 that carry no rows, measured from
+the committed fixture:
+
+| Date | What it is |
+|---|---|
+| Thu 2025-11-27 | Thanksgiving |
+| Tue 2025-12-16 | NBA Cup final — no regular-season games |
+| Wed 2025-12-24 | Christmas Eve |
+| Fri 2026-02-13 → Wed 2026-02-18 | All-Star break |
+| Sat 2026-04-11 | day before the finale |
+
+Every one is a scheduled NBA off day. `src/api/routes/daily-mvp-rankings.ts`
+already named these four cases in a comment; the UI called them `no scrape`,
+`The collector did not run on this date`, and showed a warning-icon page reading
+`GET /daily-mvp-rankings/2-13-2026 → 404` **instead of a leaderboard**.
+
+That last part was the real cost. On six days of the All-Star break the app
+showed no standings at all, when the truthful answer is that the standings are
+Feb 12's, unchanged, because nobody played.
+
+### What changed
+
+**Off days now inherit.** `build-source.ts` gained one concept —
+`effectiveDate(dateKey)`, the game day whose standings are in effect — and
+everything date-scoped routes through it: the new `standingsFor` (which the
+board reads), `rowFor`, and `fieldAround`. That last one matters most: the API
+correctly 404s for an off day, so the profile had to resolve the date *before*
+the request rather than interpret the 404 after it.
+
+**Charts run flat instead of breaking.** `projectHistory` carries the last
+observed value across off days, so `rankGeometry` sees no gap. The dashed
+connectors, the shaded bands and the `no scrape` label are deleted. Verified
+mid-break: Jokić on Feb 16 renders one polyline, zero dashed gaps, zero shaded
+bands — reading `#2 of 532 · 1.261 · 39/55 games`, which matches this document's
+own pre-build checkpoint for him exactly.
+
+`HistoryPoint` now separates two things `missing` conflated: `noGames` belongs to
+the date, a null rank on a *game* day belongs to the player (he had not debuted).
+Only the first is carried — there is a test for a rookie to keep it that way.
+
+**Race to #1 had three defects, all the same shape as phase 6's.**
+
+1. It drew outside its own card. `rankGeometry` was called with a hardcoded max
+   rank of 8, so a player at #12 mapped to y=230 in a 176-tall box. Now uses the
+   `rankDomain` written in phase 6. Measured after the fix: every point between
+   y=14 and y=110, inside a 176 box.
+2. It plotted the **wrong five players** — the cast came from `TODAY_KEY`, the
+   season-final leaders, while the lines were drawn over the selected date. On
+   Jan 20 it charted SAS and BOS above a board listing DET and PHI. Now reads the
+   selected date; verified the five `<title>`s match the five rows beneath.
+3. It labelled teams. Each line was already a player; only the label was a team
+   abbreviation. They are ringed headshots now, initials underneath so a missing
+   photo still resolves.
+
+A de-collision bug was found by measuring rather than looking: the per-face
+clamp that kept circles inside the band silently undid the spacing pass, leaving
+rank 1 and rank 2 thirteen pixels apart when they need twenty-four. Fixed by
+shifting the column as a unit.
+
+**The Collector card is deleted.** Source `basketball-reference`, a hardcoded
+`06:12 ET` run time, `Last run: failed` (a misread of `snap.missing`), and
+`Gaps in window`. Every row was fiction. Nothing replaces it.
+
+**Renames**, so the code stops describing a collector that does not exist:
+`ScrapeRibbon` → `SeasonRibbon`, `D.MISSING` → `D.NO_GAME_DAYS`,
+`Snapshot.missing`/`HistoryPoint.missing` → `noGames`, `nearestWithData` →
+`nearestGameDays`. The ribbon also lost an `i > 24` shading rule that meant
+"within the last 30 days" when the strip was 30 cells long and, across 174, only
+made the first three weeks look different for no recoverable reason.
+`src/services/scraper/` is dead code and was deliberately left for its own
+change.
+
+`grep -riE "scrape|collector|basketball.reference" src/front-end/src` now
+returns only comments recording what things used to be.
+
+### Verification
+
+168 tests green, up from 160. Driven in a browser on spare ports against the
+live database: the All-Star break renders a real board under a *"No NBA games …
+standings unchanged since Feb 12"* banner with nearest-game-day buttons; Jan 20's
+rail chart stays in its box with the right five faces; fixture mode still runs
+with no database at all.
 
 ---
 

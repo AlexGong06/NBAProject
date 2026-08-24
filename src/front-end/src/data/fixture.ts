@@ -1,10 +1,11 @@
-// Offline data source: a real 30-day window exported from the production
-// database, committed as public/rankings.json.
+// Offline data source: the whole 2025-26 season, top 25 per date, exported from
+// the database and committed as public/rankings.json. 164 game dates, 4,100
+// rows, 78 players — enough to run the app with no database at all.
 //
 // This used to be a simulation — eight hand-written players and a sine wave
-// that faked day-to-day movement. It is now genuine scraped data: real stats,
-// real availability recovered from Basketball Reference game logs, and the days
-// the collector actually failed, left as gaps.
+// that faked day-to-day movement. It is real data now: real stats and real
+// availability, computed from NBA stats API game logs, with the ten days the
+// NBA played no games carrying no rows.
 //
 // Nothing here computes anything. Regenerate with `pnpm generate-fixture`.
 

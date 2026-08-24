@@ -1,5 +1,6 @@
 import logger from "../../utils/logger";
 import { getDb } from "../../database/database";
+import { lastGameFor, lastGameIndex } from "./last-game-index";
 import { Router } from "express";
 
 const playersRouter = Router();
@@ -125,10 +126,17 @@ playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
       counts.map((c: { _id: string; better: number }) => [c._id, c.better]),
     );
 
+    // The same per-row last-game summary the board carries. Without it a row
+    // reached through this endpoint would be missing a field the identical row
+    // reached through the board has, and the profile would show a chip or not
+    // depending on which path loaded it.
+    const games = await lastGameIndex();
+
     res.json(
       results.map((row) => ({
         ...row,
         calculatedRank: (betterByDate.get(row.isoDate) ?? 0) + 1,
+        lastGame: lastGameFor(games, row.playerId, row.isoDate),
       })),
     );
   } catch (err) {

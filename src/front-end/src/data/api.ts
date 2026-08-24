@@ -4,6 +4,8 @@
 //   GET /players                          every player in the league, for search
 //   GET /players/:name/daily-mvp-rankings  one player's full season, ranks included
 //   GET /daily-mvp-rankings/:date?around=  one date's field around one player
+//   GET /games/last?player=&date=       his most recent game on or before a date
+//   GET /games/:gameId?player=           one game, from that player's side
 //
 // The board and the roster are fetched once at startup and indexed in memory,
 // so the component tree stays synchronous. Individual seasons are fetched only
@@ -18,7 +20,9 @@
 // rest on demand.
 
 import { buildDataSource } from "./build-source";
-import type { DataSource, FieldWindow, RankedPlayer, RosterEntry, StoredRow } from "./types";
+import type {
+  DataSource, FieldWindow, PlayerGame, RankedPlayer, RosterEntry, StoredRow,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
 
@@ -65,6 +69,20 @@ export async function loadApiSource(): Promise<DataSource> {
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
       return (await res.json()) as FieldWindow;
+    },
+    // A 404 means the player has no game on or before that date — he had not
+    // debuted. That is an answer, so it resolves null and the panel says so.
+    fetchGame: async (playerName, query) => {
+      const player = encodeURIComponent(playerName);
+      const path =
+        "gameId" in query
+          ? `/games/${encodeURIComponent(query.gameId)}?player=${player}`
+          : `/games/last?player=${player}&date=${encodeURIComponent(query.onOrBefore)}`;
+
+      const res = await fetch(`${API_BASE}${path}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+      return (await res.json()) as PlayerGame;
     },
   });
 }

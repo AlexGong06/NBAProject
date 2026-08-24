@@ -25,6 +25,21 @@ export const C = {
   accentMid: "#796cbf",
   accentDark: "#423a6a",
   accentWash: "rgba(145,132,217,0.12)",
+
+  // ── Game view ────────────────────────────────────────────────────────────
+  // Darker than the surfaces above on purpose: the video well and the box score
+  // are the one place the page stops being a document and starts being a
+  // screen, and they recede rather than stack another card colour.
+  gameSurface: "#0f1119",
+  gameSurfaceAlt: "#14161f",
+  /** Opponent's logo disc — one step back from the player's own team. */
+  oppDisc: "#1f212e",
+  oppDiscLine: "#34374a",
+  /** The tracked player's row, pinned at the top of a box score. */
+  boxRowSelf: "#20222f",
+  tableHead: "#151722",
+  /** Negative plus-minus. Not red — nothing else in this palette is. */
+  pmNegative: "#8a8fa3",
 } as const;
 
 /** Line colours for the multi-player "field" chart, most prominent first. */
@@ -63,9 +78,13 @@ export function fmt(n: number, digits = 3): string {
   return n.toFixed(digits);
 }
 
+/**
+ * Rank movement against the previous game day — not the previous calendar day,
+ * since ten of those had no games and nothing to move against.
+ */
 export function deltaLabel(d: number): string {
-  if (d > 0) return `▲ ${d} since last scrape`;
-  if (d < 0) return `▼ ${Math.abs(d)} since last scrape`;
+  if (d > 0) return `▲ ${d} since the last game day`;
+  if (d < 0) return `▼ ${Math.abs(d)} since the last game day`;
   return "— no change";
 }
 

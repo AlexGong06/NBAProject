@@ -6,7 +6,7 @@
 // and history.
 //
 // Nothing in this file computes a score. Every number the UI shows was
-// calculated once, by the backend, at scrape time, and stored. That is
+// calculated once, by the backend, when the season was built, and stored. That is
 // deliberate: the app used to re-run the MVP formula in the browser to recover
 // intermediate terms the database had thrown away, which gave one calculation
 // two implementations that could disagree — and they did.
@@ -14,7 +14,7 @@
 import { TEAMS } from "./teams";
 import type {
   DataSource, DateInfo, FieldWindow, Game, HistoryPoint, PlayerSeason,
-  RankedPlayer, RosterEntry, Snapshot, StoredRow,
+  PlayerGame, RankedPlayer, RosterEntry, Snapshot, Standings, StoredRow,
 } from "./types";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -99,6 +99,14 @@ export type SourceExtras = {
     dateKey: string,
     window: number,
   ) => Promise<FieldWindow | null>;
+  /**
+   * Fetch one game, from a player's side. Resolves null when the source has no
+   * game data — the offline fixture never has.
+   */
+  fetchGame?: (
+    playerName: string,
+    query: { gameId: string } | { onOrBefore: string },
+  ) => Promise<PlayerGame | null>;
 };
 
 export function buildDataSource(
@@ -118,9 +126,13 @@ export function buildDataSource(
 
   const present = [...byDate.keys()].sort((a, b) => sortKey(a) - sortKey(b));
 
-  // Every calendar day between the first and last observation, so a day the
-  // collector missed stays visible as a gap instead of vanishing from the
-  // timeline. A missing day is not a day without candidates.
+  // Every calendar day between the first and last game, so a day the NBA did
+  // not play stays visible on the timeline instead of vanishing from it.
+  //
+  // A day with no rows is a day with no games — Thanksgiving, Christmas Eve,
+  // the NBA Cup final, the All-Star break. There are ten of them in 2025-26 and
+  // not one is a failure to collect: the season is rebuilt retroactively from
+  // the NBA stats API, in one pass, so there is no run that could have missed.
   const DATES: DateInfo[] = [];
   const first = new Date(sortKey(present[0]));
   const last = new Date(sortKey(present[present.length - 1]));
@@ -128,12 +140,12 @@ export function buildDataSource(
     DATES.push(toDateInfo(`${d.getMonth() + 1}-${d.getDate()}-${d.getFullYear()}`));
   }
 
-  const MISSING = new Set(DATES.filter((d) => !byDate.has(d.key)).map((d) => d.key));
+  const NO_GAME_DAYS = new Set(DATES.filter((d) => !byDate.has(d.key)).map((d) => d.key));
   const TODAY_KEY = DATES[DATES.length - 1].key;
 
   const SNAPSHOTS: Snapshot[] = DATES.map((date) => {
     const dayRows = byDate.get(date.key);
-    if (!dayRows) return { date, missing: true, rows: [] };
+    if (!dayRows) return { date, noGames: true, rows: [] };
 
     // Ordered by the stored score, and the rank is the resulting position —
     // never a rank that arrived on the row. A stored rank beside a score from a
@@ -142,7 +154,7 @@ export function buildDataSource(
       .sort((a, b) => b.mvpValue - a.mvpValue)
       .map((r, n) => ({ ...r, calculatedRank: n + 1, date: date.key, delta: 0 }));
 
-    return { date, missing: false, rows: ordered };
+    return { date, noGames: false, rows: ordered };
   });
 
   const dateIndex = (dateKey: string) => DATES.findIndex((d) => d.key === dateKey);
@@ -151,17 +163,35 @@ export function buildDataSource(
 
   const previousWithData = (dateKey: string): Snapshot | null => {
     for (let i = dateIndex(dateKey) - 1; i >= 0; i--) {
-      if (!SNAPSHOTS[i].missing) return SNAPSHOTS[i];
+      if (!SNAPSHOTS[i].noGames) return SNAPSHOTS[i];
     }
     return null;
   };
 
-  const nearestWithData = (dateKey: string, count: number): DateInfo[] => {
+  /**
+   * The game day whose standings are in effect on `dateKey`.
+   *
+   * Itself when games were played; otherwise the most recent game day before
+   * it. Nobody played on Feb 15, so the standings on Feb 15 are the standings
+   * from Feb 12 — not an absence, and certainly not an error.
+   *
+   * Every date-scoped read goes through here. The first date in the calendar is
+   * a game day by construction (the calendar is built from the dates that have
+   * rows), so this only returns null for a key outside the season.
+   */
+  const effectiveDate = (dateKey: string): DateInfo | null => {
+    const snap = snapshot(dateKey);
+    if (!snap) return null;
+    if (!snap.noGames) return snap.date;
+    return previousWithData(dateKey)?.date ?? null;
+  };
+
+  const nearestGameDays = (dateKey: string, count: number): DateInfo[] => {
     const idx = dateIndex(dateKey);
     const out: DateInfo[] = [];
     for (let r = 1; r < DATES.length && out.length < count; r++) {
       [idx - r, idx + r].forEach((j) => {
-        if (out.length < count && j >= 0 && j < DATES.length && !SNAPSHOTS[j].missing) {
+        if (out.length < count && j >= 0 && j < DATES.length && !SNAPSHOTS[j].noGames) {
           out.push(SNAPSHOTS[j].date);
         }
       });
@@ -169,15 +199,41 @@ export function buildDataSource(
     return out;
   };
 
-  /** Rankings for a date, with movement measured against the last day that has data. */
+  /**
+   * Rankings as they stood on a date, with movement measured against the
+   * previous game day.
+   *
+   * Strict: a day with no games has no board of its own and returns null. Use
+   * `standingsFor` to ask the question a reader actually asks — "what were the
+   * standings on this date" — which on an off day is answered by the previous
+   * game day rather than by silence.
+   */
   const rankings = (dateKey: string): RankedPlayer[] | null => {
     const snap = snapshot(dateKey);
-    if (!snap || snap.missing) return null;
+    if (!snap || snap.noGames) return null;
     const prev = previousWithData(dateKey);
     return snap.rows.map((r) => {
       const before = prev ? prev.rows.find((x) => x.player === r.player) : null;
       return { ...r, delta: before ? before.calculatedRank - r.calculatedRank : 0 };
     });
+  };
+
+  /**
+   * The standings in effect on a date, off days included.
+   *
+   * `asOf` is the game day the rows come from and `noGames` says whether that
+   * differs from the date asked for, so the caller can show a board *and* say
+   * why it has not moved. The board used to render an error page here, which
+   * described six days of the All-Star break as six days of broken data.
+   */
+  const standingsFor = (dateKey: string): Standings | null => {
+    const asOf = effectiveDate(dateKey);
+    if (!asOf) return null;
+
+    const rows = rankings(asOf.key);
+    if (!rows) return null;
+
+    return { rows, asOf, noGames: asOf.key !== dateKey };
   };
 
   /**
@@ -206,6 +262,48 @@ export function buildDataSource(
    */
   const inFlight = new Map<string, Promise<PlayerSeason | null>>();
 
+  /**
+   * Project a player's values onto the season calendar, carrying the last
+   * observed value across days the NBA did not play.
+   *
+   * ── Why carry forward ──────────────────────────────────────────────────
+   *
+   * A player's rank on Feb 15 is his rank from Feb 12, because nobody played in
+   * between. Leaving those days null drew the All-Star break as a six-day hole
+   * with a dashed line across it, captioned "no scrape" — a rendering of broken
+   * data where there is none. Carrying the value forward draws a flat line,
+   * which is what actually happened.
+   *
+   * The two reasons a day can have no value stay distinct: `noGames` belongs to
+   * the date, and a null rank on a *game* day belongs to the player — he had
+   * not debuted, or the loaded board never held him. Only the first is carried.
+   */
+  const projectHistory = (
+    valueAt: (dateKey: string) => { rank: number; score: number } | null,
+  ): HistoryPoint[] => {
+    let last: { rank: number; score: number } | null = null;
+
+    return DATES.map((date) => {
+      const noGames = NO_GAME_DAYS.has(date.key);
+      const observed = noGames ? null : valueAt(date.key);
+      if (observed) last = observed;
+
+      const carried = noGames && last !== null;
+      const value = observed ?? (carried ? last : null);
+
+      return {
+        date,
+        noGames,
+        carried,
+        rank: value ? value.rank : null,
+        score: value ? value.score : null,
+      };
+    });
+  };
+
+  /** Board-derived histories, built once per player. */
+  const boardHistory = new Map<string, HistoryPoint[]>();
+
   const history = (playerName: string, dateKey: string, days: number): HistoryPoint[] => {
     const end = dateIndex(dateKey);
     const start = Math.max(0, end - days + 1);
@@ -221,15 +319,16 @@ export function buildDataSource(
     const fetched = seasonCache.get(playerName);
     if (fetched) return fetched.history.slice(start, end + 1);
 
-    return SNAPSHOTS.slice(start, end + 1).map((s) => {
-      const row = s.missing ? null : s.rows.find((r) => r.player === playerName);
-      return {
-        date: s.date,
-        missing: s.missing,
-        rank: row ? row.calculatedRank : null,
-        score: row ? row.mvpValue : null,
-      };
-    });
+    let projected = boardHistory.get(playerName);
+    if (!projected) {
+      projected = projectHistory((key) => {
+        const row = snapshot(key)?.rows.find((r) => r.player === playerName);
+        return row ? { rank: row.calculatedRank, score: row.mvpValue } : null;
+      });
+      boardHistory.set(playerName, projected);
+    }
+
+    return projected.slice(start, end + 1);
   };
 
   // Each player's most recent row, current leader first, every entry carrying a
@@ -304,14 +403,9 @@ export function buildDataSource(
       if (!local) return null;
       return {
         current: local,
-        history: SNAPSHOTS.map((s) => {
-          const row = s.missing ? null : s.rows.find((r) => r.player === playerName);
-          return {
-            date: s.date,
-            missing: s.missing,
-            rank: row ? row.calculatedRank : null,
-            score: row ? row.mvpValue : null,
-          };
+        history: projectHistory((key) => {
+          const row = snapshot(key)?.rows.find((r) => r.player === playerName);
+          return row ? { rank: row.calculatedRank, score: row.mvpValue } : null;
         }),
       };
     };
@@ -328,8 +422,9 @@ export function buildDataSource(
       }
 
       // Index the fetched rows by date so history lines up with the calendar the
-      // rest of the app already built. Dates the player has no row for stay
-      // missing rather than being drawn as a drop to zero.
+      // rest of the app already built. A game day the player has no row for —
+      // he had not debuted — stays empty rather than being drawn as a drop to
+      // zero; a day with no games is carried forward by projectHistory.
       // `delta` is movement against the previous day, which only the board knows
       // — the API sends a season, not a comparison. Default it to 0 so the type
       // holds and the UI shows "even" rather than rendering `undefined`.
@@ -341,14 +436,9 @@ export function buildDataSource(
         current: withDelta.reduce((latest, r) =>
           sortKey(r.date) > sortKey(latest.date) ? r : latest,
         ),
-        history: DATES.map((date) => {
-          const row = byKey.get(date.key);
-          return {
-            date,
-            missing: !row,
-            rank: row ? row.calculatedRank : null,
-            score: row ? row.mvpValue : null,
-          };
+        history: projectHistory((key) => {
+          const row = byKey.get(key);
+          return row ? { rank: row.calculatedRank, score: row.mvpValue } : null;
         }),
       };
 
@@ -367,14 +457,65 @@ export function buildDataSource(
    * Rank deliberately does not come from here. A board row carries its rank
    * within the loaded top N, which is not a league rank; `fieldAround` is what
    * knows the difference and says so.
+   *
+   * An off day resolves to the game day before it — his numbers on Feb 15 are
+   * his numbers from Feb 12, because he did not play in between.
    */
   const rowFor = (playerName: string, dateKey: string): RankedPlayer | null => {
-    const fetched = seasonRows.get(playerName)?.get(dateKey);
+    const asOf = effectiveDate(dateKey);
+    if (!asOf) return null;
+
+    const fetched = seasonRows.get(playerName)?.get(asOf.key);
     if (fetched) return fetched;
 
-    const snap = snapshot(dateKey);
-    if (!snap || snap.missing) return null;
-    return snap.rows.find((r) => r.player === playerName) ?? null;
+    return snapshot(asOf.key)?.rows.find((r) => r.player === playerName) ?? null;
+  };
+
+  // ── Games ────────────────────────────────────────────────────────────────
+  //
+  // Cached by game id, and shared between in-flight callers, for the same
+  // reason seasons are: stepping prev/next through a player's games walks back
+  // over ones already fetched, and the board links straight into one.
+  const gameCache = new Map<string, PlayerGame | null>();
+  const gamesInFlight = new Map<string, Promise<PlayerGame | null>>();
+
+  const fetchGameOnce = (
+    key: string,
+    run: () => Promise<PlayerGame | null>,
+  ): Promise<PlayerGame | null> => {
+    if (gameCache.has(key)) return Promise.resolve(gameCache.get(key) ?? null);
+
+    const pending = gamesInFlight.get(key);
+    if (pending) return pending;
+
+    const request = run()
+      .then((game) => {
+        gameCache.set(key, game);
+        // Also key it by id, so a game reached via "last game on this date" is
+        // not fetched again when prev/next lands back on it.
+        if (game) gameCache.set(`id:${game.gameId}`, game);
+        return game;
+      })
+      .finally(() => gamesInFlight.delete(key));
+
+    gamesInFlight.set(key, request);
+    return request;
+  };
+
+  const loadGame = (playerName: string, gameId: string): Promise<PlayerGame | null> =>
+    fetchGameOnce(`id:${gameId}`, async () =>
+      extras.fetchGame ? extras.fetchGame(playerName, { gameId }) : null,
+    );
+
+  const loadLastGame = (playerName: string, dateKey: string): Promise<PlayerGame | null> => {
+    // Resolved through the effective date so an off day asks about the game day
+    // it inherits from, rather than about a date on which nobody played.
+    const asOf = effectiveDate(dateKey);
+    if (!asOf) return Promise.resolve(null);
+
+    return fetchGameOnce(`last:${playerName}:${asOf.key}`, async () =>
+      extras.fetchGame ? extras.fetchGame(playerName, { onOrBefore: asOf.key }) : null,
+    );
   };
 
   const fieldAround = async (
@@ -382,15 +523,22 @@ export function buildDataSource(
     dateKey: string,
     window: number,
   ): Promise<FieldWindow | null> => {
+    // Resolved before the request, not after. The API stores no rows for a day
+    // with no games and correctly 404s for one, so asking it about Feb 15
+    // returns nothing at all — the profile would report a player with no
+    // standing rather than a player whose standing simply did not move.
+    const asOf = effectiveDate(dateKey);
+    if (!asOf) return null;
+
     if (extras.fetchFieldAround) {
-      const field = await extras.fetchFieldAround(playerName, dateKey, window);
+      const field = await extras.fetchFieldAround(playerName, asOf.key, window);
       if (field) return field;
     }
 
     // Board fallback. `complete: false` is the important part — these ranks are
     // positions within however many rows were loaded, and the UI has to be able
     // to tell that apart from a rank out of the whole league.
-    const day = rankings(dateKey);
+    const day = rankings(asOf.key);
     if (!day) return null;
 
     const idx = day.findIndex((r) => r.player === playerName);
@@ -410,18 +558,22 @@ export function buildDataSource(
     PLAYERS,
     ROSTER,
     DATES,
-    MISSING,
+    NO_GAME_DAYS,
     TODAY_KEY,
     snapshot,
     dateIndex,
     previousWithData,
-    nearestWithData,
+    nearestGameDays,
+    effectiveDate,
     rankings,
+    standingsFor,
     history,
     findPlayer,
     loadPlayerSeason,
     fieldAround,
     rowFor,
+    loadLastGame,
+    loadGame,
     nextGames,
   };
 }

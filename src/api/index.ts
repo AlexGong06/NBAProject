@@ -1,6 +1,7 @@
 import express from "express";
 import dailyRankingsRouter from "./routes/daily-mvp-rankings";
 import playersRouter from "./routes/players";
+import gamesRouter from "./routes/games";
 import logger from "../utils/logger";
 import cors from "cors";
 
@@ -13,6 +14,7 @@ app.use(cors());
 // register your router
 app.use("/daily-mvp-rankings", dailyRankingsRouter);
 app.use("/players", playersRouter);
+app.use("/games", gamesRouter);
 
 const server = app.listen(PORT);
 

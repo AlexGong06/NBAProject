@@ -86,16 +86,26 @@ export function rowsToObjects<T = Record<string, unknown>>(
 }
 
 /**
- * Call a stats endpoint.
+ * Call a stats endpoint and return the parsed body, whatever its shape.
  *
  * `params` are appended as-is. Many endpoints require parameters to be present
  * but empty (`LeagueID=`), so empty strings are sent rather than dropped.
+ *
+ * ── Why this is separate from `nbaStats` ──────────────────────────────────
+ *
+ * The classic endpoints answer with `{ resultSets: [{ headers, rowSet }] }`.
+ * The v3 endpoints do not — `scoreboardv3` answers with
+ * `{ scoreboard: { games: [...] } }`, already keyed by name. Running it through
+ * `nbaStats` fails on the result-set assertion, which is a correct assertion for
+ * the endpoints that have result sets and simply does not apply here.
+ *
+ * So the transport is shared and the envelope check is not.
  */
-export async function nbaStats(
+export async function nbaStatsJson<T = unknown>(
   endpoint: string,
   params: Record<string, string> = {},
   timeoutMs = DEFAULT_TIMEOUT_MS,
-): Promise<StatsResponse> {
+): Promise<T> {
   const url = `${BASE_URL}/${endpoint}?${new URLSearchParams(params)}`;
 
   const controller = new AbortController();
@@ -123,7 +133,21 @@ export async function nbaStats(
     throw new NbaApiError(`${endpoint} returned ${res.status}`, endpoint, res.status);
   }
 
-  const body = (await res.json()) as StatsResponse;
+  return (await res.json()) as T;
+}
+
+/**
+ * Call a classic stats endpoint, asserting the result-set envelope.
+ *
+ * Use this for anything that returns `headers` + `rowSet`. For the v3 endpoints
+ * that return named JSON instead, use `nbaStatsJson`.
+ */
+export async function nbaStats(
+  endpoint: string,
+  params: Record<string, string> = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<StatsResponse> {
+  const body = await nbaStatsJson<StatsResponse>(endpoint, params, timeoutMs);
   if (!body.resultSets?.length) {
     throw new NbaApiError(`${endpoint} returned no result sets`, endpoint);
   }

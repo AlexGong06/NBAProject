@@ -108,6 +108,17 @@ scripts/
   return code 292. Query one date at a time against the
   `{ isoDate: 1, mvpValue: -1 }` index instead; it is also faster than
   `allowDiskUse`.
+- **10 of the season's 174 days have no rows, and that is correct.** Thanksgiving,
+  the NBA Cup final, Christmas Eve, the All-Star break (6 days), and the day
+  before the finale. `GET /daily-mvp-rankings/:date` returns 404 for them. They
+  are *not* collection failures — there is no collector. The front end resolves
+  an off day to the previous game day (`effectiveDate` / `standingsFor` /
+  `projectHistory` in `build-source.ts`) so every date shows a board and charts
+  run flat rather than breaking. Never write rows for these days.
+- **`HistoryPoint` distinguishes two kinds of nothing.** `noGames` belongs to the
+  date; a null `rank` on a day that *did* have games belongs to the player — he
+  had not debuted, or the loaded board never held him. Only the first is carried
+  forward. Blur them and a rookie gets a rank before his first game.
 - **`src/services/scraper/`** is retained Basketball Reference code that nothing
   in the live path calls.
 

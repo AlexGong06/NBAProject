@@ -9,10 +9,12 @@
     "generate-two-player-fixture": "ts-node scripts/generate-two-player-fixture.ts",
     "generate-fixture": "ts-node scripts/generate-fixture.ts",
     "fetch-game-logs": "ts-node scripts/fetch-game-logs.ts",
+    "fetch-summaries": "ts-node scripts/fetch-game-summaries.ts",
     "migrate": "ts-node scripts/migrate-formula-v2.ts",
     "cleanup": "ts-node scripts/cleanup-legacy-data.ts",
     "validate-estimates": "ts-node scripts/validate-estimates.ts",
-    "verify-db": "ts-node scripts/verify-database.ts"
+    "verify-db": "ts-node scripts/verify-database.ts",
+    "verify-games": "ts-node scripts/verify-game-data.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -1,8 +1,8 @@
 // Tests for the front end's only data logic.
 //
 // Since the browser stopped computing scores, this module is all that stands
-// between stored rows and the screen: grouping by day, detecting the days the
-// collector missed, ordering the board, and measuring movement across gaps.
+// between stored rows and the screen: grouping by day, marking the days the NBA
+// did not play, ordering the board, and measuring movement across off days.
 //
 // Nothing here checks arithmetic — there is none left to check. What it guards
 // is the shape of the answer, which is where the failures actually happened.
@@ -86,9 +86,18 @@ describe("refusing data it cannot render", () => {
   });
 });
 
-describe("days the collector missed", () => {
-  // Two days of data three days apart: the day between them was a failure, not
-  // an absence of candidates, and it has to stay on the timeline.
+// ── Days the NBA did not play ──────────────────────────────────────────────
+//
+// Ten days of the 2025-26 season carry no rows: Thanksgiving, the NBA Cup
+// final, Christmas Eve, the six-day All-Star break, and the day before the
+// finale. None is a failure to collect — the season is rebuilt in one pass from
+// the NBA stats API, so there is no run that could have missed one.
+//
+// These tests used to be called "days the collector missed" and asserted that
+// such a day has no rankings and a null rank in history. That was the old
+// nightly-scrape model. The standings on an off day are the standings from the
+// last game day, unchanged, because nobody played.
+describe("days the NBA did not play", () => {
   const D = buildDataSource(
     [
       row({ date: "3-1-2026", player: "A", mvpValue: 2 }),
@@ -99,35 +108,63 @@ describe("days the collector missed", () => {
     "test",
   );
 
-  it("keeps missing days on the calendar", () => {
+  it("keeps off days on the calendar", () => {
     expect(D.DATES.map((d) => d.key)).toEqual([
       "3-1-2026",
       "3-2-2026",
       "3-3-2026",
     ]);
-    expect([...D.MISSING]).toEqual(["3-2-2026"]);
+    expect([...D.NO_GAME_DAYS]).toEqual(["3-2-2026"]);
   });
 
-  // null, never []. An empty array reads as "no candidates today", which is a
-  // different and false claim.
-  it("returns null for a missing day, not an empty list", () => {
+  // `rankings` stays strict — a day with no games has no board of its own, and
+  // an empty array would read as "no candidates today", a different and false
+  // claim. `standingsFor` is the one that answers the reader's question.
+  it("has no board of its own for an off day", () => {
     expect(D.rankings("3-2-2026")).toBeNull();
     expect(D.rankings("3-1-2026")).toHaveLength(2);
   });
 
-  it("reports gaps in history with null rank and score", () => {
-    const points = D.history("A", "3-3-2026", 30);
-    const gap = points.find((p) => p.missing);
+  it("serves the previous game day's standings on an off day", () => {
+    const s = D.standingsFor("3-2-2026")!;
 
-    expect(gap).toBeDefined();
-    expect(gap!.rank).toBeNull();
-    expect(gap!.score).toBeNull();
+    expect(s.noGames).toBe(true);
+    expect(s.asOf.key).toBe("3-1-2026");
+    expect(s.rows.map((r) => r.player)).toEqual(["A", "B"]); // Mar 1 order
   });
 
-  // Movement is measured against the last day that actually has data. Comparing
-  // against the calendar-previous day would make every player "unchanged"
-  // whenever a scrape failed.
-  it("measures movement across a gap, not against it", () => {
+  it("reports a game day as itself, not as carried over", () => {
+    const s = D.standingsFor("3-3-2026")!;
+
+    expect(s.noGames).toBe(false);
+    expect(s.asOf.key).toBe("3-3-2026");
+    expect(s.rows.map((r) => r.player)).toEqual(["B", "A"]); // Mar 3 order
+  });
+
+  it("resolves an off day to the game day before it", () => {
+    expect(D.effectiveDate("3-2-2026")!.key).toBe("3-1-2026");
+    expect(D.effectiveDate("3-3-2026")!.key).toBe("3-3-2026");
+  });
+
+  // The flat line. This used to assert null, which drew the All-Star break as a
+  // six-day hole with a dashed line across it captioned "no scrape".
+  it("carries rank and score forward across an off day", () => {
+    const points = D.history("A", "3-3-2026", 30);
+    const off = points.find((p) => p.noGames)!;
+
+    expect(off.carried).toBe(true);
+    expect(off.rank).toBe(1); // his Mar 1 rank, unchanged
+    expect(off.score).toBe(2);
+  });
+
+  it("gives a player his numbers from the last game day", () => {
+    expect(D.rowFor("A", "3-2-2026")!.mvpValue).toBe(2);
+  });
+
+  // Movement is measured against the last day that actually had games.
+  // Comparing against the calendar-previous day would make every player
+  // "unchanged" across every off day.
+  it("measures movement across an off day, not against it", () => {
     const day3 = D.rankings("3-3-2026")!;
     const a = day3.find((r) => r.player === "A")!;
     const b = day3.find((r) => r.player === "B")!;
@@ -136,11 +173,78 @@ describe("days the collector missed", () => {
     expect(b.delta).toBe(1);
   });
 
-  it("offers the nearest days that do have data", () => {
-    expect(D.nearestWithData("3-2-2026", 2).map((d) => d.key)).toEqual([
+  it("offers the nearest days that games were played on", () => {
+    expect(D.nearestGameDays("3-2-2026", 2).map((d) => d.key)).toEqual([
       "3-1-2026",
       "3-3-2026",
     ]);
+  });
+});
+
+// The real shape, not a two-day toy: six consecutive off days, which is what
+// the All-Star break is and what made the old rendering look worst.
+describe("a six-day break", () => {
+  const D = buildDataSource(
+    [
+      row({ date: "2-12-2026", player: "Star", mvpValue: 2 }),
+      row({ date: "2-12-2026", player: "Rival", mvpValue: 1 }),
+      row({ date: "2-19-2026", player: "Star", mvpValue: 2.1 }),
+      row({ date: "2-19-2026", player: "Rival", mvpValue: 1.1 }),
+    ],
+    "test",
+  );
+
+  it("carries every day of the break, at the pre-break rank", () => {
+    const points = D.history("Star", "2-19-2026", 30);
+    const broken = points.filter((p) => p.noGames);
+
+    expect(broken).toHaveLength(6); // Feb 13 through Feb 18
+    expect(broken.every((p) => p.carried)).toBe(true);
+    expect(broken.every((p) => p.rank === 1)).toBe(true);
+    expect(broken.every((p) => p.score === 2)).toBe(true);
+  });
+
+  // The line has to be continuous for the chart to draw it flat rather than
+  // splitting into two segments joined by a dashed connector.
+  it("leaves no null in the middle of the season", () => {
+    const points = D.history("Star", "2-19-2026", 30);
+    expect(points.every((p) => p.rank != null)).toBe(true);
+  });
+
+  it("still reports a real off day in the middle of the break", () => {
+    const s = D.standingsFor("2-16-2026")!;
+    expect(s.noGames).toBe(true);
+    expect(s.asOf.key).toBe("2-12-2026");
+  });
+});
+
+// The distinction carrying forward must not blur: a day with no games belongs
+// to the calendar, a player with no row belongs to the player.
+describe("a player who has not debuted", () => {
+  const D = buildDataSource(
+    [
+      row({ date: "3-1-2026", player: "Veteran", mvpValue: 2 }),
+      row({ date: "3-3-2026", player: "Veteran", mvpValue: 2 }),
+      row({ date: "3-3-2026", player: "Rookie", mvpValue: 1 }),
+    ],
+    "test",
+  );
+
+  it("draws nothing before his first game, and does not carry backwards", () => {
+    const points = D.history("Rookie", "3-3-2026", 30);
+    const byKey = new Map(points.map((p) => [p.date.key, p]));
+
+    // Mar 1: games were played and he was not in them.
+    expect(byKey.get("3-1-2026")!.rank).toBeNull();
+    expect(byKey.get("3-1-2026")!.carried).toBe(false);
+
+    // Mar 2: no games, but there is still nothing to carry forward.
+    expect(byKey.get("3-2-2026")!.noGames).toBe(true);
+    expect(byKey.get("3-2-2026")!.rank).toBeNull();
+    expect(byKey.get("3-2-2026")!.carried).toBe(false);
+
+    // Mar 3: he plays.
+    expect(byKey.get("3-3-2026")!.rank).toBe(2);
   });
 });
 
@@ -454,12 +558,20 @@ describe("a player the board saw on only one date", () => {
   // The empty chart. `history` used to defer to the board for anyone who
   // appeared in it at all, which for him meant one point and nulls everywhere
   // else — a chart that renders as a blank grid and reads as "no data".
+  //
+  // Only the two observed days are asserted. This fixture has rows on exactly
+  // those two dates, so every day between them counts as a day with no games
+  // and is carried forward — correct, and not what this test is about.
   it("draws his whole season, not the single day the board caught", async () => {
     const D = source();
     await D.loadPlayerSeason("One Good Day");
 
-    const ranked = D.history("One Good Day", LATE, D.DATES.length).filter((h) => h.rank != null);
-    expect(ranked.map((h) => h.rank)).toEqual([20, 337]);
+    const points = D.history("One Good Day", LATE, D.DATES.length);
+    const observed = points.filter((h) => h.rank != null && !h.carried);
+
+    expect(observed.map((h) => h.rank)).toEqual([20, 337]);
+    // And the line between them is continuous rather than a gap.
+    expect(points.every((h) => h.rank != null)).toBe(true);
   });
 
   it("leaves players the board genuinely covers alone", async () => {

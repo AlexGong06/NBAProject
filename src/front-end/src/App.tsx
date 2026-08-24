@@ -87,6 +87,55 @@ function Shell() {
     [navigate, searchParams],
   );
 
+  // Straight to a game, with the date carried along. The panel and the game id
+  // live in the URL for the same reason `?date=` does: a profile has to be
+  // linkable in the state it is being read in, and a game view that could not
+  // be linked to would be the only part of the app that could not.
+  const openGame = useCallback(
+    (name: string, gameId: string) => {
+      setSearchOpen(false);
+      const next = new URLSearchParams(searchParams);
+      next.set("panel", "game");
+      next.set("game", gameId);
+      navigate(`/player/${encodeURIComponent(name)}?${next.toString()}`);
+    },
+    [navigate, searchParams],
+  );
+
+  const pickPanel = useCallback(
+    (next: "trend" | "game") => {
+      const params = new URLSearchParams(searchParams);
+      if (next === "game") {
+        params.set("panel", "game");
+        // Clearing `?game=` makes the tab mean what its label says: his last
+        // game as of this date. After stepping back through a few games the tab
+        // still previews the anchor, so clicking it has to return there rather
+        // than leaving you on whichever game you stopped at.
+        params.delete("game");
+      } else {
+        // Leaving the game panel drops the game with it. A `?game=` left behind
+        // on the trend view would silently pin the panel to one game the next
+        // time it was opened, ignoring the date.
+        params.delete("panel");
+        params.delete("game");
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // `replace` so stepping through a player's games does not bury the board
+  // under a hundred history entries — the same reasoning as the date ribbon.
+  const pickGame = useCallback(
+    (gameId: string) => {
+      const params = new URLSearchParams(searchParams);
+      params.set("panel", "game");
+      params.set("game", gameId);
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
   const pickDate = useCallback(
     (key: string) => {
       const next = new URLSearchParams(searchParams);
@@ -140,6 +189,10 @@ function Shell() {
   const dateKey =
     requested && D.dateIndex(requested) >= 0 ? requested : D.TODAY_KEY;
 
+  // Anything other than "game" is the trend, so a mangled `?panel=` degrades to
+  // the default view rather than to a blank one.
+  const panelParam = searchParams.get("panel") === "game" ? "game" : "trend";
+
   const view = decodedName ? "profile" : "rankings";
   const todayRows = D.rankings(D.TODAY_KEY) ?? [];
   const focusPlayer =
@@ -166,6 +219,7 @@ function Shell() {
           topN={TOP_N}
           onPickDate={pickDate}
           onOpenPlayer={openPlayer}
+          onOpenGame={openGame}
           onTogglePanel={() => setPanelOpen(true)}
         />
       ) : (
@@ -174,6 +228,10 @@ function Shell() {
           playerName={decodedName as string}
           dateKey={dateKey}
           onPickDate={pickDate}
+          panel={panelParam}
+          gameId={searchParams.get("game")}
+          onPickPanel={pickPanel}
+          onPickGame={pickGame}
           onBack={() => navigate(`/?date=${encodeURIComponent(dateKey)}`)}
           onOpenPlayer={openPlayer}
           onTogglePanel={() => setPanelOpen(true)}

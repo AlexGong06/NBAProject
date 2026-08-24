@@ -296,6 +296,14 @@ async function main() {
     await db.collection(DAILY_COLLECTION).createIndex({ date: 1, mvpValue: -1 });
     await db.collection(DAILY_COLLECTION).createIndex({ isoDate: 1, mvpValue: -1 });
     await db.collection(DAILY_COLLECTION).createIndex({ player: 1, isoDate: 1 });
+
+    // The game log had only `_id` until the game view needed to read it. Its two
+    // questions are "this player's most recent game on or before a date" and
+    // "every row of this game", and without these each is a scan of 26,638 wide
+    // documents on every request.
+    await db.collection(GAME_LOG_COLLECTION).createIndex({ playerId: 1, date: -1 });
+    await db.collection(GAME_LOG_COLLECTION).createIndex({ gameId: 1 });
+    await db.collection(GAME_LOG_COLLECTION).createIndex({ playerName: 1, date: -1 });
     logger.info("indexes ensured");
   } finally {
     await client.close();

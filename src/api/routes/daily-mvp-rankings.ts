@@ -1,5 +1,6 @@
 import logger from "../../utils/logger";
 import { getDb } from "../../database/database";
+import { lastGameFor, lastGameIndex } from "./last-game-index";
 import { Router } from "express";
 
 const dailyRankingsRouter = Router();
@@ -90,7 +91,14 @@ dailyRankingsRouter.get("/", async (req, res) => {
       ),
     );
 
-    const rows = perDate.flat();
+    // Each row carries the player's last game *as of that row's date*, so the
+    // board can draw a chip per row without a request per row. Attached here
+    // rather than fetched by the client for the same reason the rank is: it is
+    // a property of a player on a date, and the date is already known.
+    const index = await lastGameIndex();
+    const rows = perDate
+      .flat()
+      .map((r: any) => ({ ...r, lastGame: lastGameFor(index, r.playerId, r.isoDate) }));
 
     res.json(rows);
   } catch (err) {
@@ -144,11 +152,17 @@ async function fieldAround(db: any, date: string, player: string, window: number
     .limit(window * 2 + 1)
     .toArray();
 
+  const index = await lastGameIndex();
+
   return {
     rank,
     fieldSize,
     complete: true,
-    rows: rows.map((r: any, i: number) => ({ ...r, calculatedRank: start + i + 1 })),
+    rows: rows.map((r: any, i: number) => ({
+      ...r,
+      calculatedRank: start + i + 1,
+      lastGame: lastGameFor(index, r.playerId, r.isoDate),
+    })),
   };
 }
 
@@ -197,7 +211,10 @@ dailyRankingsRouter.get("/:date", async (req, res) => {
       return;
     }
 
-    res.json(results);
+    const index = await lastGameIndex();
+    res.json(
+      results.map((r: any) => ({ ...r, lastGame: lastGameFor(index, r.playerId, r.isoDate) })),
+    );
   } catch (err) {
     logger.error(err);
     res.status(500).send("Server error");

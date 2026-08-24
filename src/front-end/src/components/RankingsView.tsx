@@ -3,10 +3,21 @@ import { C, MONO, deltaLabel, deltaShort, fmt, initials, label, statList, tabula
 import { bumpChart, sparkline } from "../charts";
 import type { DataSource, RankedPlayer } from "../data/types";
 import { headshotUrl } from "../data/headshot";
-import ScrapeRibbon from "./ScrapeRibbon";
+import SeasonRibbon from "./SeasonRibbon";
+import LastGameChip from "./LastGameChip";
+import { shortDate } from "../data/last-game";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Headshot, HoverBox, HoverButton, WarningIcon,
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Headshot, HoverBox, HoverButton, PlayIcon,
 } from "./ui";
+
+/**
+ * A player's name as an SVG id fragment.
+ *
+ * Each face in the bump chart needs its own `<clipPath>`, and names carry
+ * spaces, apostrophes and accents — "Nikola Jokić", "De'Anthony Melton" — none
+ * of which survive in an id referenced by `url(#…)`.
+ */
+const slug = (name: string) => name.replace(/[^a-zA-Z0-9]/g, "-");
 
 type Props = {
   D: DataSource;
@@ -14,6 +25,8 @@ type Props = {
   topN: number;
   onPickDate: (key: string) => void;
   onOpenPlayer: (name: string) => void;
+  /** Opens a player's profile straight onto that game, rather than the trend. */
+  onOpenGame: (name: string, gameId: string) => void;
   onTogglePanel: () => void;
 };
 
@@ -31,13 +44,18 @@ function SplitBar({ wcPct, tsPct, height, fills }: {
 }
 
 export default function RankingsView({
-  D, dateKey, topN, onPickDate, onOpenPlayer, onTogglePanel,
+  D, dateKey, topN, onPickDate, onOpenPlayer, onOpenGame, onTogglePanel,
 }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
 
   const snap = D.snapshot(dateKey);
-  const rows = D.rankings(dateKey);
+
+  // The standings in effect on this date, which on a day with no games are the
+  // previous game day's. Every date in the season has a board now; the view no
+  // longer has an "and otherwise show nothing" branch.
+  const standings = D.standingsFor(dateKey);
+  const rows = standings?.rows ?? null;
   const hasData = !!rows;
 
   const idx = D.dateIndex(dateKey);
@@ -62,7 +80,7 @@ export default function RankingsView({
         `${Math.round((p.totalStats / total) * 100)}% stats`,
       meta:
         `${D.TEAMS[p.team] ?? p.team} · ${p.teamWins}–${p.teamGamesPlayed - p.teamWins} · ` +
-        // Rows scraped before `pos` existed carry null; drop the segment rather
+        // A player the bio endpoint did not cover carries a null `pos`; drop the segment rather
         // than rendering the word "null" between two real values.
         [p.pos, `${p.pointsPerGame.toFixed(1)}/${p.reboundsPerGame.toFixed(1)}/${p.assistsPerGame.toFixed(1)}`]
           .filter(Boolean)
@@ -79,9 +97,11 @@ export default function RankingsView({
   // data rather than asserted.
   const heroStreak = (() => {
     if (!hero) return "";
-    const pts = D.history(hero.player, dateKey, 14).filter((p) => p.rank != null);
+    // Game days only. Counting the carried-forward off days would inflate every
+    // streak by however much of the All-Star break fell inside the window.
+    const pts = D.history(hero.player, dateKey, 14).filter((p) => p.rank != null && !p.noGames);
     const held = pts.filter((p) => p.rank === 1).length;
-    return `Held #1 for ${held} of the last ${pts.length} scrapes`;
+    return `Held #1 for ${held} of the last ${pts.length} game days`;
   })();
 
   return (
@@ -95,9 +115,8 @@ export default function RankingsView({
               {snap ? snap.date.long : ""}
             </h1>
             <div style={{ marginTop: 8, fontSize: 13, color: C.textDim }}>
-              {hasData
-                ? `Top ${topN} of ${D.PLAYERS.length} tracked · total value = availability × (0.5 win contribution + 0.5 total stats)`
-                : "The collector did not run on this date"}
+              {`Top ${topN} of ${D.ROSTER.length} players · ` +
+                `total value = availability × (0.5 win contribution + 0.5 total stats)`}
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -116,61 +135,54 @@ export default function RankingsView({
               }}
               hoverStyle={{ borderColor: C.accentDeep, color: C.text }}
             >
-              Today
+              {/* Not "Today". This jumps to the last date in the season, which
+                  is April 12 2026 and has not been today for months. The
+                  profile view already called it this. */}
+              End of season
             </HoverButton>
           </div>
         </div>
 
-        <ScrapeRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+        <SeasonRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
 
-        {/* ── Empty state: the collector failed on this day ───────────── */}
-        {!hasData && (
+        {/* ── An off day ───────────────────────────────────────────────
+            A note above a real board, not an error page instead of one.
+
+            This used to be a warning icon reading "No scrape ran on …",
+            "Historical days are never backfilled", and a `→ 404` receipt. Every
+            word of that was left over from the nightly Basketball Reference
+            scrape. Nothing failed on these ten days: the NBA did not play, so
+            the standings are the ones from the last game day, unchanged. */}
+        {standings?.noGames && (
           <div
             style={{
-              border: `1px dashed ${C.lineStrong}`, borderRadius: 14,
-              background: C.surface, padding: "48px 40px",
+              display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px 14px",
+              border: `1px solid ${C.lineStrong}`, borderRadius: 12,
+              background: C.surfaceSunk, padding: "12px 16px", marginBottom: 20,
             }}
           >
-            <div
-              style={{
-                width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.accentDark}`,
-                display: "grid", placeItems: "center", color: C.accent, marginBottom: 20,
-              }}
-            >
-              <WarningIcon />
-            </div>
-            <h2 style={{ margin: "0 0 8px", fontSize: 25, fontWeight: 500, letterSpacing: "-0.015em" }}>
-              No scrape ran on {snap ? snap.date.long : dateKey}
-            </h2>
-            <p style={{ margin: "0 0 24px", fontSize: 14, color: C.textDim, maxWidth: "52ch", textWrap: "pretty" }}>
-              The collector returned no rows for this date, so there is no ranking to compute.
-              Historical days are never backfilled — pick the nearest day with data.
-            </p>
-            <div style={{ ...label, marginBottom: 10 }}>Nearest days with data</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {D.nearestWithData(dateKey, 4).map((d) => (
+            <span style={{ fontSize: 13, color: C.textMuted }}>
+              <strong style={{ fontWeight: 500, color: C.text }}>No NBA games</strong>
+              {" on "}{snap ? snap.date.long : dateKey} — standings unchanged since{" "}
+              {standings.asOf.long}.
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+              <span style={{ fontSize: 11, color: C.textGhost }}>Nearest game days</span>
+              {D.nearestGameDays(dateKey, 4).map((d) => (
                 <HoverButton
                   key={d.key}
                   onClick={() => onPickDate(d.key)}
                   style={{
-                    height: 34, padding: "0 14px", background: "transparent",
-                    border: `1px solid ${C.accentDeep}`, borderRadius: 8,
-                    color: C.accentPale, fontSize: 13, cursor: "pointer",
+                    height: 26, padding: "0 10px", background: "transparent",
+                    border: `1px solid ${C.accentDeep}`, borderRadius: 7,
+                    color: C.accentPale, fontSize: 12, cursor: "pointer",
                   }}
                   hoverStyle={{ background: C.accentWash }}
                 >
-                  {d.long}
+                  {d.short}
                 </HoverButton>
               ))}
-            </div>
-            <div
-              style={{
-                marginTop: 28, paddingTop: 20, borderTop: `1px solid ${C.line}`,
-                fontFamily: MONO, fontSize: 11, color: C.textGhost,
-              }}
-            >
-              GET /daily-mvp-rankings/{dateKey} → 404
-            </div>
+            </span>
           </div>
         )}
 
@@ -244,6 +256,20 @@ export default function RankingsView({
                     )}
                   </div>
                 </div>
+
+                {/* The hero has no expandable drawer — it is a separate render
+                    path from the rows below — so without this the league leader
+                    would be the one player whose last game you could not see. */}
+                {hero.lastGame && (
+                  <div style={{ marginTop: 18 }}>
+                    <LastGameChip
+                      game={hero.lastGame}
+                      viewedDateKey={dateKey}
+                      onOpen={() => onOpenGame(hero.player, hero.lastGame!.gameId)}
+                      wide
+                    />
+                  </div>
+                )}
               </div>
 
               <div style={{ textAlign: "right" }}>
@@ -269,7 +295,7 @@ export default function RankingsView({
         {/* ── Rows 2..N ───────────────────────────────────────────────── */}
         {rest.map((p) => {
           const d = decorate(p, maxScore);
-          const sp = sparkline(D, p.player, dateKey, 140, 30);
+          const sp = sparkline(D, p.player, dateKey, 116, 30);
           const isOpen = expanded === p.player;
           return (
             <div
@@ -279,10 +305,13 @@ export default function RankingsView({
                 background: C.surface, marginBottom: 10, overflow: "hidden",
               }}
             >
+              {/* The split bar's own column gave way to the last-game chip.
+                  Its information survives as the label under the sparkline —
+                  the percentages were what people read, not the bar. */}
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "34px 56px minmax(180px, 1fr) 120px 150px 92px 34px",
+                  gridTemplateColumns: "34px 56px minmax(0, 1fr) 124px 224px 96px 34px",
                   alignItems: "center", gap: 16, padding: "14px 18px",
                 }}
               >
@@ -335,15 +364,26 @@ export default function RankingsView({
                 </div>
 
                 <div>
-                  <svg width="100%" height={30} viewBox="0 0 140 30" style={{ display: "block", overflow: "visible" }}>
+                  <svg width="100%" height={30} viewBox="0 0 116 30" style={{ display: "block", overflow: "visible" }}>
                     <polyline points={sp.points} fill="none" stroke={C.textFaint} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" />
                     <circle cx={sp.x} cy={sp.y} r={2.5} fill={C.accentBright} />
                   </svg>
+                  <div style={{ fontSize: 10, color: C.textGhost, marginTop: 5 }}>{d.splitLabel}</div>
                 </div>
 
-                <div>
-                  <SplitBar wcPct={d.wcPct} tsPct={d.tsPct} height={8} fills={[C.raised, C.accentMid, C.accentDark]} />
-                  <div style={{ fontSize: 10, color: C.textGhost, marginTop: 6 }}>{d.splitLabel}</div>
+                <div style={{ minWidth: 0 }}>
+                  {p.lastGame ? (
+                    <LastGameChip
+                      game={p.lastGame}
+                      viewedDateKey={dateKey}
+                      onOpen={() => onOpenGame(p.player, p.lastGame!.gameId)}
+                    />
+                  ) : (
+                    // The fixture carries no game data, and a player can have no
+                    // game before his debut. Say which rather than drawing an
+                    // empty chip that looks like a failed fetch.
+                    <div style={{ fontSize: 10, color: C.textGhost }}>No game yet</div>
+                  )}
                 </div>
 
                 <div style={{ textAlign: "right" }}>
@@ -383,7 +423,45 @@ export default function RankingsView({
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 20 }}>
+                    {/* First position, because it is the reason to open a row.
+                        The label changes when no reel resolved: offering to
+                        "watch" something that cannot play is a promise the app
+                        already knows it will break. */}
+                    {p.lastGame && (
+                      <>
+                        <HoverButton
+                          onClick={() => onOpenGame(p.player, p.lastGame!.gameId)}
+                          style={{
+                            height: 36, padding: "0 14px", borderRadius: 8,
+                            display: "inline-flex", alignItems: "center", gap: 9,
+                            background: p.lastGame.hasHighlight ? "rgba(145,132,217,0.10)" : "transparent",
+                            border: `1px solid ${p.lastGame.hasHighlight ? C.accent : C.lineStrong}`,
+                            color: p.lastGame.hasHighlight ? C.accentPale : C.textDim,
+                            fontSize: 13, cursor: "pointer",
+                          }}
+                          hoverStyle={
+                            p.lastGame.hasHighlight
+                              ? { background: "rgba(145,132,217,0.20)" }
+                              : { color: C.text, borderColor: C.accentDeep }
+                          }
+                        >
+                          <PlayIcon />
+                          {p.lastGame.hasHighlight
+                            ? `Watch the game played on ${shortDate(p.lastGame.date)}`
+                            : `Box score for ${shortDate(p.lastGame.date)}`}
+                        </HoverButton>
+                        {/* His line in that game. These sit under a button
+                            naming a date, so they can only be read as the box
+                            score for it — season averages here would be wrong
+                            by a margin nobody would catch. */}
+                        <span style={{ fontSize: 12, color: C.textFaint }}>
+                          {`${p.lastGame.points} pts · ${p.lastGame.rebounds} reb · ` +
+                            `${p.lastGame.assists} ast${p.lastGame.hasHighlight ? "" : " · no reel found"}`}
+                        </span>
+                        <span style={{ flex: 1 }} />
+                      </>
+                    )}
                     <HoverButton
                       onClick={() => onOpenPlayer(p.player)}
                       style={{
@@ -432,11 +510,47 @@ export default function RankingsView({
             {bump.segments.map((s) => (
               <polyline key={s.id} points={s.points} fill="none" stroke={s.color} strokeWidth={s.width} strokeLinejoin="round" strokeLinecap="round" />
             ))}
+            {/* A face per line, in place of the team abbreviation that used to
+                sit here. Initials are drawn underneath the image so a player
+                the CDN has no photo of still resolves to something readable —
+                the same ordering <Headshot> uses in the DOM. */}
+            <defs>
+              {bump.ends.map((e) => (
+                <clipPath key={`p${e.id}`} id={`face-${slug(e.id)}`}>
+                  <circle cx={e.cx} cy={e.cy} r={bump.faceRadius} />
+                </clipPath>
+              ))}
+            </defs>
             {bump.ends.map((e) => (
-              <circle key={`c${e.id}`} cx={e.x} cy={e.y} r={3} fill={e.color} />
-            ))}
-            {bump.ends.map((e) => (
-              <text key={`x${e.id}`} x={e.tx} y={e.ty} fill={e.color} fontSize={9} textAnchor="end">{e.label}</text>
+              <g key={`f${e.id}`}>
+                <title>{e.player}</title>
+                <line
+                  x1={e.x} y1={e.y} x2={e.cx - bump.faceRadius} y2={e.cy}
+                  stroke={e.color} strokeWidth={1} opacity={0.45}
+                />
+                <circle cx={e.cx} cy={e.cy} r={bump.faceRadius} fill={C.raised} />
+                <text
+                  x={e.cx} y={e.cy + 3} fill={C.textFaint} fontSize={8}
+                  textAnchor="middle"
+                >
+                  {e.initials}
+                </text>
+                {e.headshot && (
+                  <image
+                    href={e.headshot}
+                    x={e.cx - bump.faceRadius} y={e.cy - bump.faceRadius}
+                    width={bump.faceRadius * 2} height={bump.faceRadius * 2}
+                    // These are 260x190 with the head high in the frame, so
+                    // cover-and-align-top is what lands the face in the circle.
+                    preserveAspectRatio="xMidYMin slice"
+                    clipPath={`url(#face-${slug(e.id)})`}
+                  />
+                )}
+                <circle
+                  cx={e.cx} cy={e.cy} r={bump.faceRadius}
+                  fill="none" stroke={e.color} strokeWidth={1.6}
+                />
+              </g>
             ))}
           </svg>
         </div>
@@ -467,25 +581,12 @@ export default function RankingsView({
           </HoverButton>
         </div>
 
-        <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, background: C.surface, padding: 20 }}>
-          <div style={{ ...label, marginBottom: 12 }}>Collector</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[
-              { label: "Source", value: "basketball-reference" },
-              {
-                label: "Last run",
-                value: dateKey === D.TODAY_KEY ? "06:12 ET today" : snap?.missing ? "failed" : "06:12 ET",
-              },
-              { label: "Players tracked", value: String(D.PLAYERS.length) },
-              { label: "Gaps in window", value: String(D.MISSING.size) },
-            ].map((c) => (
-              <div key={c.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12 }}>
-                <span style={{ color: C.textFaint }}>{c.label}</span>
-                <span style={{ color: C.text, ...tabular }}>{c.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* A "Collector" card used to sit here reporting a source of
+            basketball-reference, a hardcoded 06:12 ET run time, and a count of
+            "gaps in window". None of it was true after the move to the NBA API:
+            there is no collector, nothing runs on a schedule, and the gaps are
+            days the NBA did not play. Deleted rather than rewritten — the rail
+            does not need something in the slot. */}
       </div>
     </div>
   );

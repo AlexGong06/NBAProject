@@ -21,8 +21,9 @@ and has been revised since.
 
 ## Run the front end
 
-No database required. The app ships with a real window of data exported from the
-production database, in `src/front-end/public/rankings.json`.
+No database required. The app ships with the whole season — top 25 per date,
+4,100 rows — exported from the production database into
+`src/front-end/public/rankings.json`.
 
 ```bash
 cd src/front-end
@@ -32,6 +33,28 @@ pnpm dev
 
 Nothing in the front end computes a score. Every number on screen was calculated
 once by the backend and stored — the UI reads and ranks, it never derives.
+
+### The season is 174 days long and has 164 game dates
+
+The ten days in between are Thanksgiving, the NBA Cup final, Christmas Eve, the
+six-day All-Star break, and the day before the finale. They carry no rows,
+because no regular-season games were played, and `GET /daily-mvp-rankings/:date`
+correctly returns a `404` for them.
+
+**The front end treats an off day as inheriting the previous game day's
+standings**, which is what actually happened — a season-to-date value cannot
+change on a day nobody played. So every date in the season shows a board, with a
+note saying the standings have not moved and since when, and rank charts run
+flat across those days rather than breaking.
+
+This is resolved on read, in `src/front-end/src/data/build-source.ts`
+(`effectiveDate`, `standingsFor`, `projectHistory`). No row is invented and
+nothing is written to the database.
+
+Earlier versions of this app scraped Basketball Reference nightly and rendered
+those ten days as collection failures — dashed gaps, hollow cells, and a "no
+scrape ran" page in place of a leaderboard. There is no collector now, and
+nothing to fail.
 
 ### Running against the real API instead
 

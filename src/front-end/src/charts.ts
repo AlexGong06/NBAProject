@@ -1,8 +1,13 @@
-// Chart geometry. Every series splits at days the collector missed, so a gap in
-// the data renders as a dashed connector rather than a straight line that
-// quietly implies continuity.
+// Chart geometry.
+//
+// Days the NBA did not play carry the previous game day's value forward, so a
+// series runs flat through the All-Star break rather than breaking across it.
+// A series does still split where a player genuinely has no value — before his
+// debut, or on days the loaded board never held him — because there is nothing
+// to draw a line between.
 
-import { LINE_COLORS, C } from "./theme";
+import { LINE_COLORS, C, initials } from "./theme";
+import { headshotUrl } from "./data/headshot";
 import type { DataSource, HistoryPoint } from "./data/types";
 
 export type Pad = { l: number; r: number; t: number; b: number };
@@ -97,11 +102,13 @@ export function rankDomain(series: HistoryPoint[][]): { lo: number; hi: number }
  * window like #181-#184 rounds several of the five fractions onto the same
  * rank, and without it the chart draws "#182" twice on top of itself.
  */
-function rankGrid(lo: number, hi: number, w: number, h: number, pad: Pad): GridLine[] {
+function rankGrid(
+  lo: number, hi: number, w: number, h: number, pad: Pad, lines = 5,
+): GridLine[] {
   const ranks =
-    lo === 1 && hi === 8
+    lo === 1 && hi === 8 && lines >= 8
       ? [1, 2, 3, 4, 5, 6, 7, 8]
-      : [...new Set(Array.from({ length: 5 }, (_, i) => Math.round(lo + ((hi - lo) * i) / 4)))];
+      : [...new Set(Array.from({ length: lines }, (_, i) => Math.round(lo + ((hi - lo) * i) / (lines - 1))))];
 
   return ranks.map((r) => {
     const y = pad.t + ((r - lo) * (h - pad.t - pad.b)) / Math.max(1, hi - lo);
@@ -121,29 +128,91 @@ export function sparkline(D: DataSource, name: string, dateKey: string, w: numbe
   };
 }
 
-/** "Race to #1" — top five, rank by day, last 14. */
+/** Radius of the headshot that terminates each line in the bump chart. */
+const BUMP_FACE = 11;
+
+/**
+ * "Race to #1" — the top five on the selected date, rank by day, last 14.
+ *
+ * Three things used to be wrong here, and all three were the chart quietly
+ * describing something other than what it claimed:
+ *
+ * 1. **It drew outside its own card.** `rankGeometry` was called with a
+ *    hardcoded max rank of 8, so a player who slipped to #12 mapped to y=230 in
+ *    a 176-tall box and painted over the page below it. The axis now follows the
+ *    players actually plotted, via the same `rankDomain` the profile uses.
+ * 2. **It plotted the wrong five.** The cast came from `D.TODAY_KEY` — the
+ *    season-final leaders — while the lines were drawn over the selected date's
+ *    window. On Jan 20 that showed two players who were not in Jan 20's top
+ *    five, directly above a board listing the five who were.
+ * 3. **It labelled teams.** Every line was already a player; only the label was
+ *    a team abbreviation. They are headshots now.
+ */
 export function bumpChart(D: DataSource, dateKey: string) {
-  const w = 300, h = 176, pad: Pad = { l: 22, r: 46, t: 10, b: 26 };
-  const top = (D.rankings(D.TODAY_KEY) ?? []).slice(0, 5);
+  const w = 300, h = 176, pad: Pad = { l: 22, r: 34, t: 14, b: 26 };
+  const top = (D.standingsFor(dateKey)?.rows ?? []).slice(0, 5);
   const segments: Segment[] = [];
   const gaps: Gap[] = [];
-  const ends: { id: string; x: number; y: number; tx: number; ty: number; color: string; label: string }[] = [];
+  const ends: {
+    id: string; x: number; y: number; cx: number; cy: number;
+    color: string; player: string; initials: string; headshot: string | null;
+  }[] = [];
+
+  const series = top.map((p) => D.history(p.player, dateKey, 14));
+  const { lo, hi } = rankDomain(series);
 
   top.forEach((p, i) => {
-    const g = rankGeometry(D.history(p.player, dateKey, 14), w, h, pad, 8);
+    const g = rankGeometry(series[i], w, h, pad, hi, lo);
     const color = LINE_COLORS[i];
     g.segments.forEach((s) => segments.push({ id: p.player + s.id, points: s.points, color, width: i === 0 ? 2 : 1.4 }));
     g.gaps.forEach((s) => gaps.push({ ...s, id: p.player + s.id, color }));
     const last = g.dots[g.dots.length - 1];
-    if (last) ends.push({ id: p.player, x: last.x, y: last.y, tx: w - 4, ty: last.y + 3, color, label: p.team });
+    if (last) {
+      ends.push({
+        id: p.player,
+        x: last.x, y: last.y,
+        cx: w - BUMP_FACE - 5, cy: last.y,
+        color,
+        player: p.player,
+        initials: initials(p.player),
+        headshot: headshotUrl(p),
+      });
+    }
   });
 
-  const grid: GridLine[] = [1, 3, 5, 8].map((r) => {
-    const y = pad.t + ((r - 1) * (h - pad.t - pad.b)) / 7;
-    return { id: r, y, ty: y + 3, x1: pad.l, x2: w - pad.r, label: `#${r}` };
-  });
+  // Keep the faces from stacking on top of each other, then move the column as
+  // a unit to fit the plot band.
+  //
+  // The two corrections have to be whole-column shifts, not per-face clamps. A
+  // clamp is what was here first, and it silently undid the spacing it had just
+  // created: rank 1 sits above the top bound, gets pushed back down to it, and
+  // lands 13px from rank 2 — overlapping the very neighbour the spacing pass
+  // had separated. Five faces need 96px of a 125px band, so shifting always
+  // fits.
+  const minGap = BUMP_FACE * 2 + 2;
+  ends.sort((a, b) => a.cy - b.cy);
+  for (let i = 1; i < ends.length; i++) {
+    const overlap = ends[i - 1].cy + minGap - ends[i].cy;
+    if (overlap > 0) ends[i].cy += overlap;
+  }
 
-  return { grid, segments, gaps, ends };
+  if (ends.length) {
+    const top = pad.t + BUMP_FACE;
+    const bottom = h - pad.b - BUMP_FACE;
+    const belowFloor = ends[ends.length - 1].cy - bottom;
+    if (belowFloor > 0) for (const e of ends) e.cy -= belowFloor;
+    const aboveCeiling = top - ends[0].cy;
+    if (aboveCeiling > 0) for (const e of ends) e.cy += aboveCeiling;
+  }
+
+  // Four lines, not the profile's five or eight — this card is 176px tall and a
+  // denser axis crowds the labels into each other.
+  const grid: GridLine[] = rankGrid(lo, hi, w, h, pad, 4).map((g) => ({
+    ...g,
+    ty: g.y + 3,
+  }));
+
+  return { grid, segments, gaps, ends, faceRadius: BUMP_FACE };
 }
 
 export type ChartMode = "rank" | "score" | "field";
@@ -169,7 +238,6 @@ export function mainChart(
     ends: [] as { id: string; tx: number; ty: number; color: string; label: string }[],
     grid: [] as GridLine[],
     xTicks: [] as { id: number; x: number; label: string }[],
-    missing: [] as { id: number; x: number; w: number; tx: number }[],
     title: "",
     subtitle: "",
   };
@@ -177,11 +245,10 @@ export function mainChart(
   const base = D.history(name, dateKey, days);
   const n = base.length;
   const X = (i: number) => pad.l + (n === 1 ? 0 : (i * (w - pad.l - pad.r)) / (n - 1));
-  const step = (w - pad.l - pad.r) / Math.max(1, n - 1);
 
-  base.forEach((p, i) => {
-    if (p.missing) out.missing.push({ id: i, x: X(i) - step * 0.42, w: step * 0.84, tx: X(i) });
-  });
+  // Days with no games used to be drawn as shaded bands labelled "no scrape".
+  // They are carried forward now, so the line simply runs flat through them —
+  // which is what happened. Nothing was missed; nobody played.
 
   const tickEvery = n > 20 ? 5 : n > 10 ? 3 : 2;
   base.forEach((p, i) => {
@@ -235,7 +302,7 @@ export function mainChart(
     out.title = "Rank vs the field";
     out.subtitle =
       cast.length > 1
-        ? "This player and his nearest rivals, rank by day — dashed where the collector missed a day"
+        ? "This player and his nearest rivals, rank by day"
         : "Loading the players around him…";
     return out;
   }
@@ -284,6 +351,6 @@ export function mainChart(
   g.gaps.forEach((s) => out.gaps.push({ ...s, id: `g${s.id}`, color: C.accentBright }));
   g.dots.forEach((d, i) => out.dots.push({ id: `d${i}`, x: d.x, y: d.y, r: i === g.dots.length - 1 ? 4.5 : 3, color: C.accentBright }));
   out.title = "MVP rank over time";
-  out.subtitle = "Lower is better — dashed where the collector missed a day";
+  out.subtitle = "Lower is better — flat where the NBA played no games";
   return out;
 }

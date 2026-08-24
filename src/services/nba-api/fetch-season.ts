@@ -32,7 +32,15 @@ export type AdvancedGameRow = {
   POSS: number | null;
 };
 
-/** Base (traditional) measure type — the raw counting stats. */
+/**
+ * Base (traditional) measure type — the raw counting stats.
+ *
+ * The endpoint returns 70 columns; these are the ones kept. The makes, the
+ * rebound split and the plus-minus were added for the game view: a box score
+ * cannot show "11-28 FG" from attempts alone, and the formula never needed
+ * them. `rowsToObjects` was already carrying every column at runtime — this
+ * type and `joinGameLogs` are what decided to drop them.
+ */
 export type BaseGameRow = {
   PLAYER_ID: number;
   GAME_ID: string;
@@ -40,12 +48,19 @@ export type BaseGameRow = {
   PTS: number | null;
   AST: number | null;
   REB: number | null;
+  OREB: number | null;
+  DREB: number | null;
   BLK: number | null;
   STL: number | null;
   PF: number | null;
   TOV: number | null;
+  FGM: number | null;
   FGA: number | null;
+  FG3M: number | null;
+  FG3A: number | null;
+  FTM: number | null;
   FTA: number | null;
+  PLUS_MINUS: number | null;
 };
 
 export type TeamGameRow = {
@@ -66,6 +81,16 @@ export type PlayerGame = {
   /** ISO date only. The API sends "2026-04-12T00:00:00"; the suffix is stripped. */
   date: string;
   won: boolean | null;
+  /**
+   * Who he played and where, parsed from the API's `MATCHUP` string —
+   * `"NOP @ MIN"` is away, `"TOR vs. BKN"` is home.
+   *
+   * The team's own abbreviation is already on `teamAbbr`, so only the opponent
+   * and the side are kept. Null when the string does not parse, rather than
+   * guessing a side.
+   */
+  opponentAbbr: string | null;
+  isHome: boolean | null;
   minutes: number;
   possessions: number;
   pie: number;
@@ -77,12 +102,19 @@ export type PlayerGame = {
   points: number;
   assists: number;
   rebounds: number;
+  offensiveRebounds: number;
+  defensiveRebounds: number;
   blocks: number;
   steals: number;
   fouls: number;
   turnovers: number;
+  fieldGoalsMade: number;
   fieldGoalAttempts: number;
+  threesMade: number;
+  threeAttempts: number;
+  freeThrowsMade: number;
   freeThrowAttempts: number;
+  plusMinus: number;
 };
 
 export type TeamGame = {
@@ -107,6 +139,36 @@ export function isoDate(apiDate: string): string {
 
 const n = (v: number | null | undefined): number =>
   typeof v === "number" && Number.isFinite(v) ? v : 0;
+
+/**
+ * Split the API's `MATCHUP` string into opponent and side.
+ *
+ *   "NOP @ MIN"     → away at MIN
+ *   "TOR vs. BKN"   → home against BKN
+ *
+ * The separator is the whole signal: `@` means the team travelled, `vs.` means
+ * it hosted. Anything that does not match returns nulls rather than defaulting
+ * to a side — a game silently labelled "home" is worse than one labelled
+ * nothing, because nobody checks a plausible label.
+ *
+ * ── `isHome` is not authoritative ─────────────────────────────────────────
+ *
+ * On a neutral-site game **both** sides read `@`, because neither team is
+ * hosting. Five games in 2025-26 are like this — the NBA Cup semifinals and
+ * final in Las Vegas among them — and the opponent still parses correctly while
+ * the side does not.
+ *
+ * `GameSummaries2526` carries the scoreboard's own home/away assignment and a
+ * `neutralSite` flag, and that is what anything user-facing should read. This
+ * field is the fallback for when no summary exists.
+ */
+export function parseMatchup(
+  matchup: string | null | undefined,
+): { opponentAbbr: string | null; isHome: boolean | null } {
+  const m = matchup?.match(/^([A-Z]{3})\s+(@|vs\.)\s+([A-Z]{3})$/);
+  if (!m) return { opponentAbbr: null, isHome: null };
+  return { opponentAbbr: m[3], isHome: m[2] === "vs." };
+}
 
 const commonParams = (season: string) => ({
   Season: season,
@@ -173,6 +235,8 @@ export function joinGameLogs(
     const minutes = n(a.MIN);
     if (minutes <= 0) continue;
 
+    const { opponentAbbr, isHome } = parseMatchup(a.MATCHUP);
+
     out.push({
       playerId: a.PLAYER_ID,
       playerName: a.PLAYER_NAME,
@@ -181,6 +245,8 @@ export function joinGameLogs(
       gameId: a.GAME_ID,
       date: isoDate(a.GAME_DATE),
       won: a.WL === null ? null : a.WL === "W",
+      opponentAbbr,
+      isHome,
       minutes,
       possessions: n(a.POSS),
       pie: n(a.PIE),
@@ -192,12 +258,19 @@ export function joinGameLogs(
       points: n(b.PTS),
       assists: n(b.AST),
       rebounds: n(b.REB),
+      offensiveRebounds: n(b.OREB),
+      defensiveRebounds: n(b.DREB),
       blocks: n(b.BLK),
       steals: n(b.STL),
       fouls: n(b.PF),
       turnovers: n(b.TOV),
+      fieldGoalsMade: n(b.FGM),
       fieldGoalAttempts: n(b.FGA),
+      threesMade: n(b.FG3M),
+      threeAttempts: n(b.FG3A),
+      freeThrowsMade: n(b.FTM),
       freeThrowAttempts: n(b.FTA),
+      plusMinus: n(b.PLUS_MINUS),
     });
   }
 

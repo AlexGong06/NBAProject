@@ -115,13 +115,22 @@ holding constant.
 
 ## What is given up
 
-The current app has a genuinely distinctive feature: it shows you its own
+The old app had a genuinely distinctive feature: it showed you its own
 collection failures. Dashed segments across gaps, hollow cells in the scrape
 ribbon, a "no scrape ran" empty state, and a `404` rather than an empty array. It
-refuses to interpolate, on the grounds that a straight line across a gap implies
+refused to interpolate, on the grounds that a straight line across a gap implies
 continuity that was never measured.
 
 **All of that disappears**, because there is nothing left to fail.
+
+> **Retired in phase 7.** Those affordances outlived the collector by several
+> phases, and in doing so inverted their own purpose: the ten days with no rows
+> are Thanksgiving, Christmas Eve, the NBA Cup final, the All-Star break and the
+> day before the finale, and calling them collection failures was itself the
+> dishonest rendering. They are now marked as days with no NBA games, and values
+> carry forward across them — which is not interpolation. Nothing is estimated
+> between two observations; a season-to-date figure simply does not change on a
+> day nobody played, so the flat line *is* the measurement.
 
 The honesty argument does not disappear with it; it moves. It goes from
 
@@ -600,6 +609,13 @@ The scrape ribbon is **repurposed rather than deleted** — same strip, one cell
 game day, filled when the player played and hollow when he rested. It becomes an
 availability strip, giving a multiplicative term in the formula its first
 visualisation.
+
+> **Partly done, phase 7.** The strip survives as `SeasonRibbon` and is now the
+> app's primary date picker on both the board and the profile: one cell per
+> calendar day, hollow and dashed where the NBA played no games. Turning it into
+> a *per-player availability* strip — filled when he played, hollow when he
+> rested — is still open, and needs game-level data the front end does not
+> currently receive.
 
 ---
 

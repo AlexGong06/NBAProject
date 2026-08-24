@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { C, LEAGUE_NOTES, fmt, initials, label, statList, tabular } from "../theme";
 import { mainChart } from "../charts";
 import type { ChartMode } from "../charts";
-import type { DataSource, FieldWindow, PlayerSeason } from "../data/types";
+import type { DataSource, FieldWindow, PlayerGame, PlayerSeason } from "../data/types";
 import { headshotUrl } from "../data/headshot";
-import ScrapeRibbon from "./ScrapeRibbon";
+import { shortDate } from "../data/last-game";
+import SeasonRibbon from "./SeasonRibbon";
+import GameView from "./GameView";
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, ExternalIcon, Headshot, HoverButton,
+  ArrowLeft, ChartLineIcon, ChevronLeft, ChevronRight, ExternalIcon, Headshot,
+  HoverButton, PlayIcon,
 } from "./ui";
 
 type Props = {
@@ -14,6 +17,12 @@ type Props = {
   playerName: string;
   dateKey: string;
   onPickDate: (key: string) => void;
+  /** Which panel is showing, from `?panel=`. */
+  panel: "trend" | "game";
+  /** From `?game=`; null resolves to his last game on or before `dateKey`. */
+  gameId: string | null;
+  onPickPanel: (panel: "trend" | "game") => void;
+  onPickGame: (gameId: string) => void;
   onBack: () => void;
   onOpenPlayer: (name: string) => void;
   onTogglePanel: () => void;
@@ -35,7 +44,8 @@ const FIELD_WINDOW = 10;
 const FIELD_CHART_NEIGHBOURS = 2;
 
 export default function PlayerProfileView({
-  D, playerName, dateKey, onPickDate, onBack, onOpenPlayer, onTogglePanel, onToast,
+  D, playerName, dateKey, onPickDate, panel, gameId, onPickPanel, onPickGame,
+  onBack, onOpenPlayer, onTogglePanel, onToast,
 }: Props) {
   const [mode, setMode] = useState<ChartMode>("rank");
   const [range, setRange] = useState(14);
@@ -105,6 +115,38 @@ export default function PlayerProfileView({
     return () => { alive = false; };
   }, [D, mode, fieldNames]);
 
+  // ── The game panel ───────────────────────────────────────────────────────
+  const [game, setGame] = useState<PlayerGame | null>(null);
+  const [gameState, setGameState] = useState<"idle" | "loading" | "missing">("idle");
+  const [videoPlaying, setVideoPlaying] = useState(false);
+
+  useEffect(() => {
+    if (panel !== "game") return;
+    let alive = true;
+    setGameState("loading");
+    setGame(null);
+
+    const load = gameId
+      ? D.loadGame(playerName, gameId)
+      : D.loadLastGame(playerName, dateKey);
+
+    load
+      .then((g) => {
+        if (!alive) return;
+        setGame(g);
+        setGameState(g ? "idle" : "missing");
+      })
+      .catch(() => alive && setGameState("missing"));
+
+    return () => { alive = false; };
+  }, [D, panel, playerName, gameId, dateKey]);
+
+  // Leaving an iframe mounted while stepping games plays the previous reel
+  // under the new header — the most confidently wrong state this panel has.
+  useEffect(() => {
+    setVideoPlaying(false);
+  }, [gameId, panel, playerName]);
+
   // Every number on this page comes from the row for the selected date. Rank is
   // the exception — that comes from `field`, which knows how large a field it
   // measured against and whether that field was the whole league.
@@ -172,6 +214,13 @@ export default function PlayerProfileView({
 
   const wcPct = b ? ((b.winContribution / totalHalf) * 100).toFixed(1) : "0";
   const tsPct = b ? ((b.totalStats / totalHalf) * 100).toFixed(1) : "0";
+
+  // A preview on the tab, from the board row we already hold — no extra fetch
+  // just to label a tab. Falls back to nothing rather than to a guess.
+  const lg = row?.lastGame ?? null;
+  const lastGameNote = lg
+    ? `${lg.win ? "W" : "L"} ${lg.teamScore}\u2013${lg.opponentScore} \u00b7 ${shortDate(lg.date)}`
+    : "";
 
   const segBtn = (active: boolean): React.CSSProperties => ({
     height: 30, padding: "0 12px",
@@ -313,8 +362,10 @@ export default function PlayerProfileView({
         <div style={{ fontSize: 15 }}>
           {date.weekday}, {date.long}
         </div>
-        {D.MISSING.has(dateKey) && (
-          <span style={{ fontSize: 11, color: C.textGhost }}>no games played</span>
+        {D.NO_GAME_DAYS.has(dateKey) && (
+          <span style={{ fontSize: 11, color: C.textGhost }}>
+            no NBA games — as of {D.effectiveDate(dateKey)?.short}
+          </span>
         )}
 
         <HoverButton
@@ -330,7 +381,75 @@ export default function PlayerProfileView({
         </HoverButton>
       </div>
 
-      <ScrapeRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+      <SeasonRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+
+      {/* ── Panels ───────────────────────────────────────────────────────
+          Tabs rather than a separate route: both panels are readings of one
+          player on one date, and the date control above already governs both.
+          A second route would need its own copy of the date and could disagree
+          with the header. The panel still lives in the URL, so a profile stays
+          linkable in the state it is being read in.
+
+          The trailing note on each tab is a preview — the tab earns its click
+          before it is clicked. */}
+      <div style={{ display: "flex", gap: 2, borderBottom: `1px solid ${C.line}`, marginBottom: 20 }}>
+        {([
+          ["trend", "Trend", <ChartLineIcon key="c" />, "rank & value"],
+          [
+            "game",
+            "Last game",
+            <PlayIcon key="p" />,
+            lastGameNote,
+          ],
+        ] as const).map(([id, text, icon, note]) => {
+          const active = panel === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onPickPanel(id)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 9,
+                padding: "10px 16px", marginBottom: -1, background: "none",
+                border: 0, borderBottom: `2px solid ${active ? C.accent : "transparent"}`,
+                color: active ? C.text : C.textDim,
+                fontSize: 14, fontWeight: 500, cursor: "pointer", font: "inherit",
+              }}
+            >
+              {icon}
+              {text}
+              {note && (
+                <span style={{ fontSize: 11, fontWeight: 400, color: C.textFaint }}>{note}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {panel === "game" ? (
+        gameState === "loading" ? (
+          <div style={{ padding: "60px 0", textAlign: "center", color: C.textFaint, fontSize: 13 }}>
+            Loading the game…
+          </div>
+        ) : game ? (
+          <GameView
+            game={game}
+            playerName={playerName}
+            playing={videoPlaying}
+            onPlay={() => setVideoPlaying(true)}
+            onStop={() => setVideoPlaying(false)}
+            onPrev={game.prevGameId ? () => onPickGame(game.prevGameId!) : null}
+            onNext={game.nextGameId ? () => onPickGame(game.nextGameId!) : null}
+          />
+        ) : (
+          <div style={{ padding: "60px 0", textAlign: "center" }}>
+            <div style={{ color: C.textDim, fontSize: 15 }}>No game to show</div>
+            <div style={{ color: C.textGhost, fontSize: 12, marginTop: 6 }}>
+              {`${p.player} had not played by ${date.long}, or this source carries no game data.`}
+            </div>
+          </div>
+        )
+      ) : (
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 40, paddingTop: 32 }}>
         <div style={{ minWidth: 0 }}>
@@ -366,15 +485,9 @@ export default function PlayerProfileView({
               {chart.grid.map((g) => (
                 <text key={`gt${g.id}`} x={0} y={g.ty} fill={C.textFaint} fontSize={10}>{g.label}</text>
               ))}
-              {/* Shaded bands where the collector produced nothing. */}
-              {chart.missing.map((m) => (
-                <rect key={`m${m.id}`} x={m.x} y={8} width={m.w} height={238} fill="#20222f" opacity={0.85} />
-              ))}
-              {chart.missing.map((m) => (
-                <text key={`mt${m.id}`} x={m.tx} y={262} fill={C.textGhost} fontSize={9} textAnchor="middle">
-                  no scrape
-                </text>
-              ))}
+              {/* Days with no games used to be shaded here and labelled "no
+                  scrape". They are carried forward now, so the line runs flat
+                  through them and there is nothing to shade. */}
               {chart.gaps.map((s) => (
                 <line key={s.id} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={s.color} strokeWidth={1.6} strokeDasharray="3 4" opacity={0.6} />
               ))}
@@ -581,6 +694,7 @@ export default function PlayerProfileView({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

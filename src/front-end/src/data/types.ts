@@ -4,9 +4,9 @@ export type PlayerStats = {
   player: string;
   team: string;
   /**
-   * Position and age were added to the scraper after most rows were collected,
-   * so historical rows carry null. The UI omits them rather than printing the
-   * word "null" where a value should be.
+   * Position and age come from a separate bio endpoint, not from the game logs,
+   * and a player the bio call did not cover carries null for both. The UI omits
+   * them rather than printing the word "null" where a value should be.
    */
   pos: string | null;
   age: number | null;
@@ -54,8 +54,8 @@ export type DateInfo = {
 };
 
 /**
- * A row exactly as the backend stored it: the scraped stats, every term of the
- * scoring formula, and which formula version produced them.
+ * A row exactly as the backend stored it: the season-to-date stats, every term
+ * of the scoring formula, and which formula version produced them.
  *
  * The front end never recreates any of this — it is read, not derived.
  */
@@ -75,7 +75,133 @@ export type StoredRow = PlayerStats &
      */
     playerId?: number;
     profileUrl?: string;
+    /**
+     * Attached by the API per row. Absent from the committed fixture, which
+     * predates the game view — the chip is simply not drawn offline.
+     */
+    lastGame?: LastGame | null;
   };
+
+/**
+ * The most recent game a player played, as of the date its row belongs to.
+ *
+ * Deliberately not a box score — this is what a chip on a leaderboard row
+ * needs, and it rides along on the board response so a board of 50 rows costs
+ * no extra requests. The full game, with both rosters and the line score, comes
+ * from `loadGame`.
+ *
+ * "As of the date" is the whole point. A chip that showed a player's latest
+ * game regardless of the date being viewed would report an April game on a
+ * November board — the same error as a rank that ignored its date.
+ */
+export type LastGame = {
+  gameId: string;
+  /** "M-D-YYYY", matching the app's other date keys. */
+  date: string;
+  isoDate: string;
+  teamAbbr: string;
+  teamId: number;
+  opponentAbbr: string;
+  opponentTeamId: number;
+  /** Meaningless when `neutralSite`, where neither team hosted. */
+  home: boolean;
+  neutralSite: boolean;
+  teamScore: number;
+  opponentScore: number;
+  win: boolean;
+  overtime: boolean;
+  /** Whether a highlight reel resolved for this game. False is a real answer. */
+  hasHighlight: boolean;
+  /** His line in *that game*, not his season averages. */
+  points: number;
+  rebounds: number;
+  assists: number;
+};
+
+/** One player's row in a game's box score. */
+export type BoxScoreRow = {
+  playerId: number;
+  player: string;
+  teamId: number;
+  minutes: number;
+  points: number;
+  rebounds: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  turnovers: number;
+  /** Already formatted as "8-23" — the makes and attempts, not a ratio. */
+  fieldGoals: string;
+  threes: string;
+  freeThrows: string;
+  plusMinus: number;
+};
+
+export type Highlight = {
+  videoId: string;
+  title: string;
+  channel: string;
+  durationLabel: string;
+};
+
+/**
+ * One game, reported from one player's side.
+ *
+ * `team`/`opponent`, the scores and `win` are all relative to the player whose
+ * profile is open — the same game viewed from the other roster is a different
+ * object. That is why the endpoints take a player as well as a game id.
+ *
+ * The final score is the sum of each side's box score rather than a separate
+ * stored number, so the header and the table beneath it cannot disagree.
+ */
+export type PlayerGame = {
+  gameId: string;
+  /** "M-D-YYYY", the key form the rest of the app queries by. */
+  date: string;
+  isoDate: string;
+  team: string;
+  teamId: number;
+  opponent: string;
+  opponentTeamId: number;
+  /** Meaningless when `neutralSite` — see LastGame. */
+  home: boolean;
+  neutralSite: boolean;
+  teamScore: number;
+  opponentScore: number;
+  win: boolean;
+  overtime: boolean;
+  overtimePeriods: number;
+  /** Q1-Q4 and any overtime periods, for each side. */
+  quarters: { team: number[]; opponent: number[] };
+  line: {
+    minutes: number;
+    points: number;
+    rebounds: number;
+    assists: number;
+    steals: number;
+    blocks: number;
+    turnovers: number;
+    fieldGoals: string;
+    threes: string;
+    freeThrows: string;
+    trueShooting: number;
+    plusMinus: number;
+  };
+  /** Both rosters, the tracked player first. */
+  box: BoxScoreRow[];
+  /** Null when no reel resolved — a real answer, not a loading state. */
+  highlight: Highlight | null;
+  /** Position in this player's season, for "Game 60 of 65". */
+  number: number;
+  of: number;
+  /**
+   * Neighbouring games, for stepping. `nextGameId` is bounded by the date being
+   * viewed — stepping forward out of the window the rest of the page is showing
+   * would leave the panel describing a game the header has not reached.
+   */
+  prevGameId: string | null;
+  nextGameId: string | null;
+};
 
 /**
  * A stored row with its position on the day it belongs to.
@@ -99,16 +225,44 @@ export type RankedPlayer = StoredRow & {
  */
 export type Snapshot = {
   date: DateInfo;
-  missing: boolean;
+  /** True when the NBA played no games that day, so the date has no board. */
+  noGames: boolean;
   rows: RankedPlayer[];
 };
 
-/** One day in a player's history. rank/score are null on days the collector failed. */
+/**
+ * One day in a player's history.
+ *
+ * Two different things can leave `rank` null, and they are not interchangeable:
+ *
+ * - `noGames` is a property of the *date* — Thanksgiving, Christmas Eve, the
+ *   All-Star break. Values are carried forward across these, so `rank` is
+ *   normally non-null with `carried: true`, and the chart draws a flat line.
+ *   Nothing was missed; nobody played.
+ * - A null `rank` on a day with games is a property of the *player* — he had
+ *   not debuted, or the loaded board never held him. Nothing is drawn.
+ */
 export type HistoryPoint = {
   date: DateInfo;
-  missing: boolean;
+  noGames: boolean;
+  /** True when this value was inherited from the previous game day. */
+  carried: boolean;
   rank: number | null;
   score: number | null;
+};
+
+/**
+ * The standings in effect on a date.
+ *
+ * `asOf` is the game day the rows actually come from. On a day with no games it
+ * is an earlier date than the one asked for, and `noGames` is true — which is
+ * what lets the board show real standings *and* explain why they have not
+ * moved, rather than reporting an absence.
+ */
+export type Standings = {
+  rows: RankedPlayer[];
+  asOf: DateInfo;
+  noGames: boolean;
 };
 
 export type Game = {
@@ -218,14 +372,35 @@ export type DataSource = {
    * displayed as a season-long rank.
    */
   rowFor(playerName: string, dateKey: string): RankedPlayer | null;
+  /**
+   * The most recent game this player played on or before `dateKey`.
+   *
+   * Not "his last game" — the profile is a function of a date, and a panel that
+   * ignored it would report an April game under a November header. Resolves
+   * null before his first appearance, and in fixture mode, which carries no
+   * game data at all.
+   */
+  loadLastGame(playerName: string, dateKey: string): Promise<PlayerGame | null>;
+  /** One specific game, for prev/next stepping and deep links. */
+  loadGame(playerName: string, gameId: string): Promise<PlayerGame | null>;
   DATES: DateInfo[];
-  MISSING: Set<string>;
+  /** Dates in the season the NBA played no games on. Ten of them in 2025-26. */
+  NO_GAME_DAYS: Set<string>;
   TODAY_KEY: string;
   snapshot(dateKey: string): Snapshot | null;
   dateIndex(dateKey: string): number;
   previousWithData(dateKey: string): Snapshot | null;
-  nearestWithData(dateKey: string, count: number): DateInfo[];
+  /** Game days closest to this date, nearest first — for jumping off an off day. */
+  nearestGameDays(dateKey: string, count: number): DateInfo[];
+  /**
+   * The game day whose standings are in effect on this date: itself when games
+   * were played, otherwise the most recent game day before it.
+   */
+  effectiveDate(dateKey: string): DateInfo | null;
+  /** Strict: null on a day with no games. Most callers want `standingsFor`. */
   rankings(dateKey: string): RankedPlayer[] | null;
+  /** The standings in effect on a date, off days included. */
+  standingsFor(dateKey: string): Standings | null;
   history(playerName: string, dateKey: string, days: number): HistoryPoint[];
   findPlayer(name: string): RankedPlayer | undefined;
   nextGames(playerName: string): Game[];

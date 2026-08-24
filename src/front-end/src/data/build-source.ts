@@ -51,6 +51,29 @@ function sortKey(dateKey: string): number {
 }
 
 /**
+ * "2026-04-12" → "4-12-2026".
+ *
+ * Split on the parts rather than going through a Date. Parsing a bare ISO date
+ * gives UTC midnight, which renders as the previous day for anyone west of
+ * Greenwich — the same trap documented in build-season.ts.
+ */
+function isoToDateKey(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${Number(m)}-${Number(d)}-${y}`;
+}
+
+function groupBy<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
+  const out = new Map<K, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const list = out.get(k);
+    if (list) list.push(item);
+    else out.set(k, [item]);
+  }
+  return out;
+}
+
+/**
  * Fail loudly on rows that predate the stored breakdown.
  *
  * Rendering them would show blanks and NaNs scattered through a board that
@@ -107,6 +130,36 @@ export type SourceExtras = {
     playerName: string,
     query: { gameId: string } | { onOrBefore: string },
   ) => Promise<PlayerGame | null>;
+  /**
+   * The ISO dates games were played on.
+   *
+   * Supplied, the season's shape no longer has to be inferred from a full set
+   * of rows — which is what made the app download 11.47 MB before rendering.
+   * Omitted, the calendar is derived from `rows` exactly as before, which is
+   * what the offline fixture does.
+   */
+  calendar?: string[];
+  /**
+   * Every player's rank and value on every date, four fields per point.
+   *
+   * This is what lets the charts work for dates whose rows were never loaded.
+   * 56 KB gzipped for the whole season, against 11.47 MB of full rows.
+   */
+  series?: SeriesPoint[];
+  /** Fetch one date's full rows, for the board. */
+  fetchDate?: (dateKey: string) => Promise<StoredRow[] | null>;
+};
+
+/** One player's standing on one date: the whole of what a chart needs. */
+export type SeriesPoint = {
+  /** player */
+  p: string;
+  /** date key, "M-D-YYYY" */
+  d: string;
+  /** rank */
+  r: number;
+  /** mvpValue */
+  v: number;
 };
 
 export function buildDataSource(
@@ -114,25 +167,67 @@ export function buildDataSource(
   source: string,
   extras: SourceExtras = {},
 ): DataSource {
-  if (!rows.length) throw new Error(`${source} returned no ranking rows`);
-  assertRowsAreComplete(rows, source);
+  if (!rows.length && !extras.series?.length) {
+    throw new Error(`${source} returned no ranking rows`);
+  }
+  if (rows.length) assertRowsAreComplete(rows, source);
 
-  const byDate = new Map<string, StoredRow[]>();
-  for (const r of rows) {
-    const list = byDate.get(r.date) ?? [];
-    list.push(r);
-    byDate.set(r.date, list);
+  // ── Full rows, per date, loaded on demand ────────────────────────────────
+  //
+  // The board needs every field of every visible row, but only for the date on
+  // screen. Whatever `rows` arrived with seeds this; `ensureDate` fills in the
+  // rest as the reader moves.
+  const rowsByDate = new Map<string, RankedPlayer[]>();
+
+  const rankRows = (dateKey: string, dayRows: StoredRow[]): RankedPlayer[] =>
+    // Ordered by the stored score, and the rank is the resulting position —
+    // never a rank that arrived on the row. A stored rank beside a score from a
+    // different formula run is how a board ends up disagreeing with itself.
+    [...dayRows]
+      .sort((a, b) => b.mvpValue - a.mvpValue)
+      .map((r, n) => ({ ...r, calculatedRank: n + 1, date: dateKey, delta: 0 }));
+
+  for (const [dateKey, dayRows] of groupBy(rows, (r) => r.date)) {
+    rowsByDate.set(dateKey, rankRows(dateKey, dayRows));
   }
 
-  const present = [...byDate.keys()].sort((a, b) => sortKey(a) - sortKey(b));
+  // ── Rank and value, per date, for the whole season ───────────────────────
+  //
+  // Four fields per player-date. This is what the charts read, and it is why
+  // they keep working for dates whose full rows were never fetched. Derived
+  // from the rows when no series is supplied, so the offline fixture is
+  // unchanged.
+  const seriesByDate = new Map<string, Map<string, { rank: number; score: number }>>();
+
+  if (extras.series?.length) {
+    for (const point of extras.series) {
+      let day = seriesByDate.get(point.d);
+      if (!day) seriesByDate.set(point.d, (day = new Map()));
+      day.set(point.p, { rank: point.r, score: point.v });
+    }
+  } else {
+    for (const [dateKey, ranked] of rowsByDate) {
+      const day = new Map<string, { rank: number; score: number }>();
+      for (const r of ranked) day.set(r.player, { rank: r.calculatedRank, score: r.mvpValue });
+      seriesByDate.set(dateKey, day);
+    }
+  }
 
   // Every calendar day between the first and last game, so a day the NBA did
   // not play stays visible on the timeline instead of vanishing from it.
   //
-  // A day with no rows is a day with no games — Thanksgiving, Christmas Eve,
-  // the NBA Cup final, the All-Star break. There are ten of them in 2025-26 and
-  // not one is a failure to collect: the season is rebuilt retroactively from
-  // the NBA stats API, in one pass, so there is no run that could have missed.
+  // A day with no games is Thanksgiving, Christmas Eve, the NBA Cup final, the
+  // All-Star break. There are ten of them in 2025-26 and not one is a failure
+  // to collect: the season is rebuilt retroactively from the NBA stats API, in
+  // one pass, so there is no run that could have missed.
+  const gameDayKeys = new Set(
+    extras.calendar?.length
+      ? extras.calendar.map(isoToDateKey)
+      : [...seriesByDate.keys()],
+  );
+
+  const present = [...gameDayKeys].sort((a, b) => sortKey(a) - sortKey(b));
+
   const DATES: DateInfo[] = [];
   const first = new Date(sortKey(present[0]));
   const last = new Date(sortKey(present[present.length - 1]));
@@ -140,30 +235,32 @@ export function buildDataSource(
     DATES.push(toDateInfo(`${d.getMonth() + 1}-${d.getDate()}-${d.getFullYear()}`));
   }
 
-  const NO_GAME_DAYS = new Set(DATES.filter((d) => !byDate.has(d.key)).map((d) => d.key));
+  const NO_GAME_DAYS = new Set(DATES.filter((d) => !gameDayKeys.has(d.key)).map((d) => d.key));
   const TODAY_KEY = DATES[DATES.length - 1].key;
 
-  const SNAPSHOTS: Snapshot[] = DATES.map((date) => {
-    const dayRows = byDate.get(date.key);
-    if (!dayRows) return { date, noGames: true, rows: [] };
-
-    // Ordered by the stored score, and the rank is the resulting position —
-    // never a rank that arrived on the row. A stored rank beside a score from a
-    // different formula run is how a board ends up disagreeing with itself.
-    const ordered = [...dayRows]
-      .sort((a, b) => b.mvpValue - a.mvpValue)
-      .map((r, n) => ({ ...r, calculatedRank: n + 1, date: date.key, delta: 0 }));
-
-    return { date, noGames: false, rows: ordered };
-  });
-
   const dateIndex = (dateKey: string) => DATES.findIndex((d) => d.key === dateKey);
-  const snapshot = (dateKey: string) =>
-    SNAPSHOTS.find((s) => s.date.key === dateKey) ?? null;
+  const dateInfo = (dateKey: string) => DATES.find((d) => d.key === dateKey) ?? null;
+
+  /**
+   * A date's board, as far as it is known.
+   *
+   * `rows` is empty both for a day with no games and for a game day whose rows
+   * have not been fetched yet — `noGames` is what tells them apart, and it is
+   * answered from the calendar rather than from whether anything is loaded.
+   */
+  const snapshot = (dateKey: string): Snapshot | null => {
+    const date = dateInfo(dateKey);
+    if (!date) return null;
+    return {
+      date,
+      noGames: NO_GAME_DAYS.has(dateKey),
+      rows: rowsByDate.get(dateKey) ?? [],
+    };
+  };
 
   const previousWithData = (dateKey: string): Snapshot | null => {
     for (let i = dateIndex(dateKey) - 1; i >= 0; i--) {
-      if (!SNAPSHOTS[i].noGames) return SNAPSHOTS[i];
+      if (!NO_GAME_DAYS.has(DATES[i].key)) return snapshot(DATES[i].key);
     }
     return null;
   };
@@ -191,8 +288,8 @@ export function buildDataSource(
     const out: DateInfo[] = [];
     for (let r = 1; r < DATES.length && out.length < count; r++) {
       [idx - r, idx + r].forEach((j) => {
-        if (out.length < count && j >= 0 && j < DATES.length && !SNAPSHOTS[j].noGames) {
-          out.push(SNAPSHOTS[j].date);
+        if (out.length < count && j >= 0 && j < DATES.length && !NO_GAME_DAYS.has(DATES[j].key)) {
+          out.push(DATES[j]);
         }
       });
     }
@@ -211,11 +308,65 @@ export function buildDataSource(
   const rankings = (dateKey: string): RankedPlayer[] | null => {
     const snap = snapshot(dateKey);
     if (!snap || snap.noGames) return null;
+    // An unfetched game day is not an empty one. `isDateLoaded` is what the UI
+    // asks; returning [] here would render a real date as a board with nobody
+    // on it.
+    if (!rowsByDate.has(dateKey)) return null;
+
+    // Movement comes from the series, not from the previous day's rows, so a
+    // delta is available whether or not that day was ever fetched.
     const prev = previousWithData(dateKey);
+    const before = prev ? seriesByDate.get(prev.date.key) : undefined;
+
     return snap.rows.map((r) => {
-      const before = prev ? prev.rows.find((x) => x.player === r.player) : null;
-      return { ...r, delta: before ? before.calculatedRank - r.calculatedRank : 0 };
+      const was = before?.get(r.player);
+      return { ...r, delta: was ? was.rank - r.calculatedRank : 0 };
     });
+  };
+
+  /**
+   * Whether the rows this date renders from are in memory.
+   *
+   * Resolved through the effective date: on a day with no games the board shows
+   * the previous game day's rows, so that is what "loaded" has to mean.
+   */
+  const isDateLoaded = (dateKey: string) => {
+    const asOf = effectiveDate(dateKey);
+    return asOf ? rowsByDate.has(asOf.key) : false;
+  };
+
+  // ── Fetching a date's rows ───────────────────────────────────────────────
+  //
+  // Deduped in flight, like `loadPlayerSeason` and `loadGame`: the ribbon can
+  // fire several picks in quick succession, and each date should cost at most
+  // one request.
+  const datesInFlight = new Map<string, Promise<void>>();
+
+  const ensureDate = (dateKey: string): Promise<void> => {
+    // Resolved through the effective date, like every other date-scoped read.
+    // On a day with no games the board shows the previous game day's standings,
+    // so that is the date whose rows have to be in memory. Fetching only the
+    // date asked for left the whole All-Star break blank — the banner and the
+    // carried-forward board both depend on rows nobody had fetched.
+    const asOf = effectiveDate(dateKey);
+    if (!asOf) return Promise.resolve();
+
+    const key = asOf.key;
+    if (rowsByDate.has(key)) return Promise.resolve();
+    if (!extras.fetchDate) return Promise.resolve();
+
+    const pending = datesInFlight.get(key);
+    if (pending) return pending;
+
+    const request = extras
+      .fetchDate(key)
+      .then((fetched) => {
+        if (fetched?.length) rowsByDate.set(key, rankRows(key, fetched));
+      })
+      .finally(() => datesInFlight.delete(key));
+
+    datesInFlight.set(key, request);
+    return request;
   };
 
   /**
@@ -321,10 +472,10 @@ export function buildDataSource(
 
     let projected = boardHistory.get(playerName);
     if (!projected) {
-      projected = projectHistory((key) => {
-        const row = snapshot(key)?.rows.find((r) => r.player === playerName);
-        return row ? { rank: row.calculatedRank, score: row.mvpValue } : null;
-      });
+      // From the series, not from the loaded rows. This is the whole reason the
+      // series exists: a sparkline covers fourteen dates, of which at most one
+      // has its full rows in memory.
+      projected = projectHistory((key) => seriesByDate.get(key)?.get(playerName) ?? null);
       boardHistory.set(playerName, projected);
     }
 
@@ -339,8 +490,8 @@ export function buildDataSource(
   // appended with a zero delta, because there is nothing to compare against.
   const latest = new Map<string, RankedPlayer>();
   for (const r of rankings(TODAY_KEY) ?? []) latest.set(r.player, r);
-  for (let i = SNAPSHOTS.length - 1; i >= 0; i--) {
-    for (const r of SNAPSHOTS[i].rows) {
+  for (let i = DATES.length - 1; i >= 0; i--) {
+    for (const r of rowsByDate.get(DATES[i].key) ?? []) {
       if (!latest.has(r.player)) latest.set(r.player, { ...r, delta: 0 });
     }
   }
@@ -403,10 +554,7 @@ export function buildDataSource(
       if (!local) return null;
       return {
         current: local,
-        history: projectHistory((key) => {
-          const row = snapshot(key)?.rows.find((r) => r.player === playerName);
-          return row ? { rank: row.calculatedRank, score: row.mvpValue } : null;
-        }),
+        history: projectHistory((key) => seriesByDate.get(key)?.get(playerName) ?? null),
       };
     };
 
@@ -567,6 +715,8 @@ export function buildDataSource(
     effectiveDate,
     rankings,
     standingsFor,
+    isDateLoaded,
+    ensureDate,
     history,
     findPlayer,
     loadPlayerSeason,

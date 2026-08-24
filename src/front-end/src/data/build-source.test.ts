@@ -659,3 +659,104 @@ describe("fieldAround", () => {
     await expect(D.fieldAround("Nobody", "3-1-2026", 5)).resolves.toBeNull();
   });
 });
+
+// ── Loading one date at a time ─────────────────────────────────────────────
+//
+// The app used to download every row of every date — 11.47 MB — before it drew
+// anything, because four different things needed the season: the ribbon, the
+// charts, the visible board, and player lookup. Only the board needs full rows,
+// and only for one date.
+//
+// So a source can now supply the calendar and a compact rank series instead,
+// and fetch rows per date. These tests pin the two things that split apart.
+describe("loading one date at a time", () => {
+  const MAR1 = "3-1-2026";
+  const MAR3 = "3-3-2026";
+
+  const series = [
+    { p: "A", d: MAR1, r: 1, v: 2 },
+    { p: "B", d: MAR1, r: 2, v: 1 },
+    { p: "A", d: MAR3, r: 2, v: 1 },
+    { p: "B", d: MAR3, r: 1, v: 2 },
+  ];
+
+  const source = (opts: { onlyLoad?: string } = {}) => {
+    const fetched: string[] = [];
+    const D = buildDataSource(
+      opts.onlyLoad === MAR1
+        ? [row({ date: MAR1, player: "A", mvpValue: 2 }), row({ date: MAR1, player: "B", mvpValue: 1 })]
+        : [],
+      "test",
+      {
+        calendar: ["2026-03-01", "2026-03-03"],
+        series,
+        fetchDate: async (dateKey) => {
+          fetched.push(dateKey);
+          return dateKey === MAR3
+            ? [row({ date: MAR3, player: "B", mvpValue: 2 }), row({ date: MAR3, player: "A", mvpValue: 1 })]
+            : [row({ date: MAR1, player: "A", mvpValue: 2 }), row({ date: MAR1, player: "B", mvpValue: 1 })];
+        },
+      },
+    );
+    return { D, fetched };
+  };
+
+  it("builds the calendar without a single row", () => {
+    const { D } = source();
+    expect(D.DATES.map((d) => d.key)).toEqual([MAR1, "3-2-2026", MAR3]);
+    expect([...D.NO_GAME_DAYS]).toEqual(["3-2-2026"]);
+  });
+
+  // The whole point of the series: a sparkline covers fourteen dates, of which
+  // at most one has its rows in memory.
+  it("charts a player across dates whose rows were never fetched", () => {
+    const { D } = source();
+    const points = D.history("A", MAR3, 30).filter((p) => p.rank != null);
+    expect(points.map((p) => p.rank)).toEqual([1, 1, 2]); // Mar 2 carried forward
+  });
+
+  it("has no board for a date until it is fetched", async () => {
+    const { D, fetched } = source();
+    expect(D.isDateLoaded(MAR3)).toBe(false);
+    expect(D.standingsFor(MAR3)).toBeNull();
+
+    await D.ensureDate(MAR3);
+
+    expect(fetched).toEqual([MAR3]);
+    expect(D.isDateLoaded(MAR3)).toBe(true);
+    expect(D.standingsFor(MAR3)!.rows.map((r) => r.player)).toEqual(["B", "A"]);
+  });
+
+  // The regression. `ensureDate` skipped any date in NO_GAME_DAYS, so an off
+  // day fetched nothing — and its board comes from the previous game day, which
+  // therefore had no rows either. The whole All-Star break rendered blank.
+  it("fetches the game day an off day inherits from", async () => {
+    const { D, fetched } = source();
+    await D.ensureDate("3-2-2026");
+
+    expect(fetched).toEqual([MAR1]);
+    expect(D.isDateLoaded("3-2-2026")).toBe(true);
+
+    const standings = D.standingsFor("3-2-2026")!;
+    expect(standings.noGames).toBe(true);
+    expect(standings.asOf.key).toBe(MAR1);
+    expect(standings.rows.map((r) => r.player)).toEqual(["A", "B"]);
+  });
+
+  it("shares one request between concurrent callers", async () => {
+    const { D, fetched } = source();
+    await Promise.all([D.ensureDate(MAR3), D.ensureDate(MAR3), D.ensureDate(MAR3)]);
+    expect(fetched).toEqual([MAR3]);
+  });
+
+  it("measures movement from the series, not from a fetched neighbour", async () => {
+    const { D } = source();
+    await D.ensureDate(MAR3);
+
+    // Mar 1 was never fetched, yet the delta against it is still known.
+    expect(D.isDateLoaded(MAR1)).toBe(false);
+    const board = D.standingsFor(MAR3)!.rows;
+    expect(board.find((r) => r.player === "B")!.delta).toBe(1); // 2 -> 1
+    expect(board.find((r) => r.player === "A")!.delta).toBe(-1);
+  });
+});

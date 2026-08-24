@@ -297,6 +297,14 @@ async function main() {
     await db.collection(DAILY_COLLECTION).createIndex({ isoDate: 1, mvpValue: -1 });
     await db.collection(DAILY_COLLECTION).createIndex({ player: 1, isoDate: 1 });
 
+    // Covers /calendar/series completely: filter, sort and both projected
+    // fields are all in the index, so the query answers 8,200 rows without
+    // touching a document. Without `player` on the end it is the same query
+    // that took 1.5s.
+    await db
+      .collection(DAILY_COLLECTION)
+      .createIndex({ isoDate: 1, mvpValue: -1, player: 1 }, { name: "series_covering" });
+
     // The game log had only `_id` until the game view needed to read it. Its two
     // questions are "this player's most recent game on or before a date" and
     // "every row of this game", and without these each is a scan of 26,638 wide

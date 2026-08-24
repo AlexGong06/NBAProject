@@ -13,6 +13,7 @@ import { C, label, tabular } from "../theme";
 import type { BoxScoreRow, PlayerGame } from "../data/types";
 import { teamLogoUrl } from "../data/team-logo";
 import { scoreline, shortDate, venueLabel } from "../data/last-game";
+import { THUMBNAIL_SIZES, videoThumbnailUrl } from "../data/video-thumbnail";
 import { ChevronLeft, ChevronRight, HoverButton, PlayIcon, TeamLogo } from "./ui";
 
 type Props = {
@@ -25,6 +26,50 @@ type Props = {
   onPlay: () => void;
   onStop: () => void;
 };
+
+/**
+ * The video's poster frame, behind the play button.
+ *
+ * Two sizes are tried in turn: `maxresdefault` is 16:9 and matches the well
+ * exactly, but is not generated for every upload; `hqdefault` always exists and
+ * is 4:3, so it gets cropped. If both fail the gradient behind shows through,
+ * which is what this looked like before.
+ *
+ * Dimmed and slightly desaturated on purpose — it is a backdrop for a control,
+ * not the content. At full brightness the play button competes with whatever
+ * freeze-frame YouTube picked.
+ */
+function Poster({ videoId, title }: { videoId: string; title: string }) {
+  const [level, setLevel] = React.useState(0);
+  const src = videoThumbnailUrl(videoId, THUMBNAIL_SIZES[level]);
+
+  if (!src) return null;
+
+  return (
+    <>
+      <img
+        src={src}
+        alt={title}
+        loading="lazy"
+        onError={() => setLevel((n) => n + 1)}
+        style={{
+          position: "absolute", inset: 0, width: "100%", height: "100%",
+          objectFit: "cover", display: "block", pointerEvents: "none",
+          opacity: 0.78,
+        }}
+      />
+      {/* Darkened only where the play button sits, so the frame stays readable
+          at the edges. A flat overlay heavy enough to carry the button washes
+          out the whole image, which defeats having a thumbnail at all. */}
+      <span
+        style={{
+          position: "absolute", inset: 0, pointerEvents: "none",
+          background: "radial-gradient(38% 42% at 50% 50%, rgba(15,17,25,0.72) 0%, rgba(15,17,25,0.18) 100%)",
+        }}
+      />
+    </>
+  );
+}
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 
@@ -178,16 +223,22 @@ export default function GameView({
                 onClick={onPlay}
                 style={{
                   position: "absolute", inset: 0, width: "100%", border: 0, cursor: "pointer",
+                  // Stays behind the thumbnail as the ground it fades into, and
+                  // is what shows if no poster frame loads.
                   background: "radial-gradient(120% 90% at 50% 30%, #262838 0%, #14161f 100%)",
-                  display: "grid", placeItems: "center", padding: 0,
+                  display: "grid", placeItems: "center", padding: 0, overflow: "hidden",
                 }}
                 hoverStyle={{ filter: "brightness(1.12)" }}
               >
+                <Poster videoId={game.highlight.videoId} title={game.highlight.title} />
                 <span
                   style={{
+                    // Above the thumbnail, and given its own stacking context so
+                    // the scrim cannot end up on top of it.
+                    position: "relative", zIndex: 1,
                     width: 64, height: 64, borderRadius: 999, display: "grid", placeItems: "center",
                     background: "rgba(145,132,217,0.14)", border: `1px solid ${C.accent}`,
-                    color: C.accentPale,
+                    color: C.accentPale, backdropFilter: "blur(2px)",
                   }}
                 >
                   <PlayIcon size={24} />

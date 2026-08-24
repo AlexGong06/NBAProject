@@ -61,6 +61,10 @@ scripts/
 | `pnpm build-season` | Dry-run the whole season: fetch, compute, verify, report |
 | `pnpm build-season --apply` | ...and write to MongoDB |
 | `pnpm verify-db` | Recompute from raw logs and check every stored row |
+| `pnpm fetch-summaries` | Quarter scores + final scores per game (`--apply` to write) |
+| `pnpm verify-games` | 12 cross-checks between the game logs and the summaries |
+| `pnpm resolve-highlights` | Map games to YouTube reels (`--apply` to write) |
+| `pnpm add-highlight <gameId> <videoId>` | Attach a reel by hand; survives a re-run |
 | `pnpm generate-fixture` | Rewrite `src/front-end/public/rankings.json` |
 | `pnpm cleanup` | Dry-run retiring the legacy collections (`--apply` to do it) |
 | `pnpm test` | Vitest, whole repo including front end |
@@ -77,7 +81,11 @@ scripts/
 ## Environment Variables
 
 - `MONGO_URI` — MongoDB Atlas connection string
-- `NBA_SEASON_LABEL` — optional, defaults to `"2025-26"`
+- `NBA_SEASON_LABEL` — optional, defaults to `"2025-26"`. Read by
+  `build-season.ts`. Not to be confused with `NBA_SEASON` (a year, `"2026"`),
+  which only the legacy Basketball Reference scripts read.
+- `YOUTUBE_API_KEY` — optional, and the only secret in the repo. Used by
+  `pnpm resolve-highlights` alone; nothing serving requests reads it.
 
 ## Collections
 
@@ -87,6 +95,13 @@ scripts/
 - **`PlayerDailyValues`** — one row per player per date (83,054), carrying
   season-to-date inputs, every term of the formula, and `mvpValue`.
   `_id` is `${playerId}:${isoDate}`.
+- **`GameSummaries2526`** — one row per game (1,230): quarter scores, final
+  score, which side was home, and a `neutralSite` flag. From `scoreboardv3`;
+  `boxscoresummaryv2` is broken for this season.
+- **`PlayerGameHighlights`** — one row per game mapping it to a YouTube video id.
+  `videoId: null` is a real answer, not a gap: it means the resolver looked and
+  found nothing, which is what stops the app retrying at read time. Rows with
+  `source: "manual"` are hand-entered and survive a re-run.
 - `DailyMvpRankings`, `DailyStatsLeaders` — legacy, superseded, safe to drop via
   `pnpm cleanup`.
 
@@ -103,11 +118,13 @@ scripts/
 - **Two date forms per row.** `date` is `"M-D-YYYY"` (the public query key, and
   unsortable as text); `isoDate` is `"YYYY-MM-DD"` (what Mongo sorts on). Both
   are indexed.
-- **Aggregations over the whole collection fail.** 83,054 wide rows exceed
-  Mongo's 100 MB in-memory limit — both `$group`/`$push` and `$setWindowFields`
-  return code 292. Query one date at a time against the
-  `{ isoDate: 1, mvpValue: -1 }` index instead; it is also faster than
-  `allowDiskUse`.
+- **Aggregations over the whole collection fail — on *wide* rows.** 83,054
+  40-field documents exceed Mongo's 100 MB in-memory limit, and both
+  `$group`/`$push` and `$setWindowFields` return code 292. The limit is on what
+  a stage materialises, not on how many rows it scans: `$project` down to three
+  fields *first* and `$setWindowFields` runs fine at ~3 MB (measured). It is no
+  faster than one indexed query per date, though, so the per-date pattern
+  stands. Never `$push` whole documents.
 - **10 of the season's 174 days have no rows, and that is correct.** Thanksgiving,
   the NBA Cup final, Christmas Eve, the All-Star break (6 days), and the day
   before the finale. `GET /daily-mvp-rankings/:date` returns 404 for them. They

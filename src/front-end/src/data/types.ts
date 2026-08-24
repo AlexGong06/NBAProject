@@ -401,6 +401,21 @@ export type DataSource = {
   rankings(dateKey: string): RankedPlayer[] | null;
   /** The standings in effect on a date, off days included. */
   standingsFor(dateKey: string): Standings | null;
+  /**
+   * Whether this date's full rows are in memory.
+   *
+   * The app loads one date at a time — the whole season was 11.47 MB, against
+   * 77 KB for a single date — so a game day can be real and not yet fetched.
+   * `standingsFor` returns null for both that and a day with no games, and this
+   * is what tells them apart: without it the UI would render an unfetched
+   * Tuesday as a day nobody played.
+   */
+  isDateLoaded(dateKey: string): boolean;
+  /**
+   * Fetch and cache one date's rows. Resolves immediately when already held,
+   * or when the date had no games.
+   */
+  ensureDate(dateKey: string): Promise<void>;
   history(playerName: string, dateKey: string, days: number): HistoryPoint[];
   findPlayer(name: string): RankedPlayer | undefined;
   nextGames(playerName: string): Game[];

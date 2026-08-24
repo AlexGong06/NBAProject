@@ -32,6 +32,19 @@ function Shell() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [D, setD] = useState<DataSource | null>(null);
+
+  // Resolved before the hooks below, because they depend on it and a hook
+  // cannot sit after the early return for the loading state.
+  //
+  // A `?date=` for a day outside the season — a stale link, a typo, a
+  // hand-edited URL — falls back to the latest date rather than rendering an
+  // empty board.
+  const requestedDate = searchParams.get("date");
+  const dateKey: string | null = D
+    ? requestedDate && D.dateIndex(requestedDate) >= 0
+      ? requestedDate
+      : D.TODAY_KEY
+    : null;
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -50,6 +63,37 @@ function Shell() {
       });
     return () => { alive = false; };
   }, []);
+
+  // ── Load the date being viewed ───────────────────────────────────────────
+  //
+  // The app holds one date's rows at a time rather than the season's — see the
+  // note in data/api.ts. A date that has not been fetched has no board, so this
+  // fetches it and re-renders when it lands.
+  //
+  // `dateLoading` exists so the views can dim rather than unmount. At ~170 ms a
+  // spinner that replaced the board would flash and shift the layout, which
+  // reads worse than the wait it is reporting.
+  const [dateLoading, setDateLoading] = useState(false);
+  const [, setDateLoaded] = useState(0);
+
+  useEffect(() => {
+    if (!D || !dateKey) return;
+    // No NO_GAME_DAYS short-circuit here: an off day still needs the previous
+    // game day's rows, which `ensureDate` resolves to. Skipping on "no games"
+    // left the All-Star break with no board at all.
+    if (D.isDateLoaded(dateKey)) return;
+
+    let alive = true;
+    setDateLoading(true);
+    D.ensureDate(dateKey)
+      .then(() => {
+        if (!alive) return;
+        setDateLoaded((n) => n + 1);
+      })
+      .finally(() => alive && setDateLoading(false));
+
+    return () => { alive = false; };
+  }, [D, dateKey]);
 
   // ⌘K opens search, Escape closes whatever is open.
   useEffect(() => {
@@ -175,19 +219,13 @@ function Shell() {
     );
   }
 
-  if (!D) {
+  if (!D || !dateKey) {
     return (
       <div style={{ ...page, display: "grid", placeItems: "center" }}>
         <div style={{ color: C.textFaint, fontSize: 13 }}>Loading rankings…</div>
       </div>
     );
   }
-
-  // A `?date=` for a day outside the season — a stale link, a typo, a hand-edited
-  // URL — falls back to the latest date rather than rendering an empty board.
-  const requested = searchParams.get("date");
-  const dateKey =
-    requested && D.dateIndex(requested) >= 0 ? requested : D.TODAY_KEY;
 
   // Anything other than "game" is the trend, so a mangled `?panel=` degrades to
   // the default view rather than to a blank one.
@@ -212,6 +250,15 @@ function Shell() {
         onTogglePanel={() => setPanelOpen((v) => !v)}
       />
 
+      {/* Dimmed, not replaced. A date costs about 170 ms to fetch; swapping the
+          board for a spinner would flash and shift the layout for longer than
+          the wait it reports. */}
+      <div
+        style={{
+          opacity: dateLoading ? 0.55 : 1,
+          transition: "opacity 180ms ease",
+        }}
+      >
       {view === "rankings" ? (
         <RankingsView
           D={D}
@@ -238,6 +285,8 @@ function Shell() {
           onToast={showToast}
         />
       )}
+
+      </div>
 
       {searchOpen && (
         <SearchOverlay

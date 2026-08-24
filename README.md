@@ -258,7 +258,8 @@ pnpm install
 
 cat > .env <<'EOF'
 MONGO_URI=<a mongodb connection string>
-NBA_SEASON=2026
+NBA_SEASON_LABEL=2025-26
+YOUTUBE_API_KEY=<optional — only for resolving highlight reels>
 EOF
 
 pnpm start-server         # Express API on :3000
@@ -266,6 +267,24 @@ pnpm start-server         # Express API on :3000
 
 There is no bundled database. `MONGO_URI` points at whatever you have — Atlas, or
 a local `mongod`. Fixture mode above exists so you don't need one.
+
+| Variable | Needed by | Notes |
+|---|---|---|
+| `MONGO_URI` | everything | required |
+| `NBA_SEASON_LABEL` | `pnpm build-season` | optional, defaults to `2025-26` |
+| `YOUTUBE_API_KEY` | `pnpm resolve-highlights` | optional; the app reads the stored result, never the API |
+| `PORT` | `pnpm start-server` | optional, defaults to 3000 |
+
+`YOUTUBE_API_KEY` is the only secret here — a YouTube Data API v3 key from
+[console.cloud.google.com](https://console.cloud.google.com), restricted to that
+one API. It is used by one offline script and never at request time, so an app
+serving traffic does not need it set at all.
+
+> **`NBA_SEASON` is a different, older variable.** The legacy Basketball
+> Reference scripts in `src/services/scraper/` and `scripts/fetch-game-logs.ts`
+> read `NBA_SEASON` as a year (`2026`); the live pipeline reads
+> `NBA_SEASON_LABEL` as a season label (`2025-26`). Nothing in the current path
+> uses the former.
 
 API surface:
 

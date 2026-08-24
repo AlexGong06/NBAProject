@@ -141,11 +141,17 @@ export default function PlayerProfileView({
     return () => { alive = false; };
   }, [D, panel, playerName, gameId, dateKey]);
 
-  // Leaving an iframe mounted while stepping games plays the previous reel
+  // Leaving an iframe mounted while the game changes plays the previous reel
   // under the new header — the most confidently wrong state this panel has.
+  //
+  // Keyed on the game actually being shown, not on the params that usually
+  // imply one. With no `?game=` the panel resolves whatever game the *date*
+  // lands on, so `gameId` stays null while the content changes underneath —
+  // and a reel already playing would carry over and autoplay the next day's
+  // game unasked.
   useEffect(() => {
     setVideoPlaying(false);
-  }, [gameId, panel, playerName]);
+  }, [game?.gameId, panel, playerName]);
 
   // Every number on this page comes from the row for the selected date. Rank is
   // the exception — that comes from `field`, which knows how large a field it

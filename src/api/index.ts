@@ -1,7 +1,9 @@
 import express from "express";
+import compression from "compression";
 import dailyRankingsRouter from "./routes/daily-mvp-rankings";
 import playersRouter from "./routes/players";
 import gamesRouter from "./routes/games";
+import calendarRouter from "./routes/calendar";
 import logger from "../utils/logger";
 import cors from "cors";
 
@@ -11,10 +13,33 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// ── Compress everything ─────────────────────────────────────────────────────
+//
+// These responses are JSON arrays of thousands of objects with identical key
+// sets, which is close to the best case for gzip: the season board measured
+// 11.47 MB raw and 2.09 MB compressed, and the compact rank series 0.46 MB down
+// to 52 KB.
+//
+// Must be registered before the routes — the middleware wraps `res.write`, so a
+// route mounted above it would answer uncompressed.
+app.use(compression());
+
+// Let the browser report how big and how slow these responses were.
+//
+// Resource timings are redacted cross-origin: without this header
+// `transferSize` reads 0 and the durations are coarse, so the front end cannot
+// measure its own load. The API and the app are on different origins here, and
+// will be on a deployed URL too.
+app.use((_req, res, next) => {
+  res.setHeader("Timing-Allow-Origin", "*");
+  next();
+});
+
 // register your router
 app.use("/daily-mvp-rankings", dailyRankingsRouter);
 app.use("/players", playersRouter);
 app.use("/games", gamesRouter);
+app.use("/calendar", calendarRouter);
 
 const server = app.listen(PORT);
 

@@ -1,0 +1,21 @@
+Games with no highlight reel on the NBA's
+"Nightly Full Game Highlights | 2025-26 Season" playlist.
+
+Generated 2026-08-24T21:26:29.080Z — 12 of 1230 games.
+
+Add one with:  pnpm add-highlight <gameId> <youtubeVideoId>
+
+DATE        MATCHUP        GAME ID       SEARCH
+------------------------------------------------------------------------------
+2025-11-09  DET @ PHI      0022500195  https://www.youtube.com/results?search_query=NBA%20DET%20at%20PHI%20full%20game%20highlights%202025-11-09
+2025-11-11  MEM @ NYK      0022500208  https://www.youtube.com/results?search_query=NBA%20MEM%20at%20NYK%20full%20game%20highlights%202025-11-11
+2025-11-24  POR @ MIL      0022500288  https://www.youtube.com/results?search_query=NBA%20POR%20at%20MIL%20full%20game%20highlights%202025-11-24
+2025-12-03  LAC @ ATL      0022500327  https://www.youtube.com/results?search_query=NBA%20LAC%20at%20ATL%20full%20game%20highlights%202025-12-03
+2025-12-28  GSW @ TOR      0022500441  https://www.youtube.com/results?search_query=NBA%20GSW%20at%20TOR%20full%20game%20highlights%202025-12-28
+2026-02-23  SAS @ DET      0022500828  https://www.youtube.com/results?search_query=NBA%20SAS%20at%20DET%20full%20game%20highlights%202026-02-23
+2026-03-14  ORL @ MIA      0022500972  https://www.youtube.com/results?search_query=NBA%20ORL%20at%20MIA%20full%20game%20highlights%202026-03-14
+2026-03-18  TOR @ CHI      0022501002  https://www.youtube.com/results?search_query=NBA%20TOR%20at%20CHI%20full%20game%20highlights%202026-03-18
+2026-03-25  MIL @ POR      0022501061  https://www.youtube.com/results?search_query=NBA%20MIL%20at%20POR%20full%20game%20highlights%202026-03-25
+2026-03-27  LAC @ IND      0022501066  https://www.youtube.com/results?search_query=NBA%20LAC%20at%20IND%20full%20game%20highlights%202026-03-27
+2026-03-29  LAC @ MIL      0022501082  https://www.youtube.com/results?search_query=NBA%20LAC%20at%20MIL%20full%20game%20highlights%202026-03-29
+2026-03-30  CLE @ UTA      0022501096  https://www.youtube.com/results?search_query=NBA%20CLE%20at%20UTA%20full%20game%20highlights%202026-03-30

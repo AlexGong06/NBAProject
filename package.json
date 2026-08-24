@@ -10,6 +10,8 @@
     "generate-fixture": "ts-node scripts/generate-fixture.ts",
     "fetch-game-logs": "ts-node scripts/fetch-game-logs.ts",
     "fetch-summaries": "ts-node scripts/fetch-game-summaries.ts",
+    "resolve-highlights": "ts-node scripts/resolve-highlights.ts",
+    "add-highlight": "ts-node scripts/add-highlight.ts",
     "migrate": "ts-node scripts/migrate-formula-v2.ts",
     "cleanup": "ts-node scripts/cleanup-legacy-data.ts",
     "validate-estimates": "ts-node scripts/validate-estimates.ts",
@@ -22,6 +24,7 @@
     ]
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/node": "^18.6.1",
     "mongodb": "4.0.4",
@@ -30,6 +33,7 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",

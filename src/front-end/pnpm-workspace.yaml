@@ -1,0 +1,13 @@
+# Makes this directory its own pnpm root.
+#
+# Without it, `pnpm install` run here walks up to the repo root, finds that
+# workspace, reports the *root* project "already up to date", and installs none
+# of the front end's own dependencies — react-dom, @types/react and
+# @vitejs/plugin-react never appear and `tsc -b` fails resolving them. A local
+# checkout hides this, because src/front-end/node_modules predates the root
+# workspace file; a fresh clone (a deploy) does not.
+#
+# esbuild's install script is approved here as well: ignoring the root
+# workspace also ignores its approvals, and vite needs the esbuild binary.
+allowBuilds:
+  esbuild: true

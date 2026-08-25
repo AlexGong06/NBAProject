@@ -28,5 +28,11 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // The co-located tests are run by the ROOT `pnpm test`, and vitest is a root
+  // dependency. This package never installs it, so type-checking these files
+  // here fails on a deploy — where only src/front-end is installed and there is
+  // no parent node_modules to resolve `vitest` from. It passes locally only
+  // because Node walks up the tree and finds the root copy.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

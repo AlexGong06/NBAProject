@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { C, LEAGUE_NOTES, fmt, initials, label, statList, tabular } from "../theme";
 import { mainChart } from "../charts";
 import type { ChartMode } from "../charts";
@@ -32,16 +32,12 @@ type Props = {
 const MODES: { id: ChartMode; label: string }[] = [
   { id: "rank", label: "Rank" },
   { id: "score", label: "Value" },
-  { id: "field", label: "Field" },
 ];
 
 const RANGES = [7, 14, 30];
 
 /** Players either side of this one in the Field position rail. */
 const FIELD_WINDOW = 10;
-
-/** How many of those neighbours the field chart plots either side of him. */
-const FIELD_CHART_NEIGHBOURS = 2;
 
 export default function PlayerProfileView({
   D, playerName, dateKey, onPickDate, panel, gameId, onPickPanel, onPickGame,
@@ -89,31 +85,6 @@ export default function PlayerProfileView({
       .catch(() => alive && setField(null));
     return () => { alive = false; };
   }, [D, playerName, dateKey]);
-
-  const fieldNames = useMemo(() => {
-    if (!field) return [];
-    const i = field.rows.findIndex((r) => r.player === playerName);
-    if (i === -1) return [playerName];
-    const start = Math.max(0, i - FIELD_CHART_NEIGHBOURS);
-    return field.rows.slice(start, start + FIELD_CHART_NEIGHBOURS * 2 + 1).map((r) => r.player);
-  }, [field, playerName]);
-
-  // Neighbours' seasons are only loaded when the field chart is actually shown.
-  // Each is another request, and the rank and value modes have no use for them.
-  //
-  // The counter is never read — bumping it exists only to re-render once they
-  // land. The chart reads those seasons through `D.history`, which is
-  // synchronous and cache-backed, so nothing else would tell React the data
-  // arrived.
-  const [, setCastLoaded] = useState(0);
-
-  useEffect(() => {
-    if (mode !== "field" || fieldNames.length === 0) return;
-    let alive = true;
-    Promise.all(fieldNames.map((n) => D.loadPlayerSeason(n).catch(() => null)))
-      .then(() => alive && setCastLoaded((n) => n + 1));
-    return () => { alive = false; };
-  }, [D, mode, fieldNames]);
 
   // ── The game panel ───────────────────────────────────────────────────────
   const [game, setGame] = useState<PlayerGame | null>(null);
@@ -215,7 +186,7 @@ export default function PlayerProfileView({
     .map((x) => x.rank as number);
   const peak = windowRanks.length ? Math.min(...windowRanks) : null;
 
-  const chart = mainChart(D, p.player, dateKey, range, mode, mode === "field" ? fieldNames : []);
+  const chart = mainChart(D, p.player, dateKey, range, mode);
   const games = D.nextGames(p.player);
 
   const wcPct = b ? ((b.winContribution / totalHalf) * 100).toFixed(1) : "0";

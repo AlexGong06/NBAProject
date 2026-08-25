@@ -81,6 +81,16 @@ type SeriesPoint = { p: string; d: string; r: number; v: number };
  */
 const seriesCache = new Map<number, Promise<SeriesPoint[]>>();
 
+/**
+ * The only depths that get their own cache entry.
+ *
+ * The cache is keyed by `?top=`, and a miss costs 164 queries and an ~8,000
+ * object array. Keyed straight off the query string, `?top=1,2,3…` is a remote
+ * out-of-memory on a small instance. An allowlist bounds the cache at four
+ * entries no matter what is asked for.
+ */
+const SERIES_DEPTHS = new Set([10, 25, 50, 100]);
+
 // GET /calendar/series?top=50
 //
 // One record per player per date: name, date, rank, value. Nothing else.
@@ -91,7 +101,7 @@ const seriesCache = new Map<number, Promise<SeriesPoint[]>>();
 // data no human reads.
 calendarRouter.get("/series", async (req, res) => {
   const raw = Number(req.query.top);
-  const top = Number.isInteger(raw) && raw > 0 ? raw : DEFAULT_TOP;
+  const top = SERIES_DEPTHS.has(raw) ? raw : DEFAULT_TOP;
 
   try {
     const cached = seriesCache.get(top);

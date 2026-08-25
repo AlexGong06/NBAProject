@@ -31,16 +31,24 @@ function windowParam(raw: unknown): number {
 }
 
 /**
+ * Hard cap on `?top=`.
+ *
+ * `?top=all` used to mean `MAX_SAFE_INTEGER`, which reaches Mongo as `limit(0)`
+ * — every row, ~11.5 MB serialized and copied again in heap by the mapping
+ * pass. One request, from anyone, on a public URL.
+ */
+const MAX_TOP = 100;
+
+/**
  * Parse `?top=` into a row limit.
  *
- * `?top=all` lifts the cap for the whole-league view. Anything unparseable
- * falls back to the default rather than erroring: a bad query string should
- * give a usable board, not a 400.
+ * Anything unparseable falls back to the default rather than erroring: a bad
+ * query string should give a usable board, not a 400.
  */
 function topParam(raw: unknown): number {
-  if (raw === "all") return Number.MAX_SAFE_INTEGER;
   const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : DEFAULT_TOP;
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_TOP;
+  return Math.min(n, MAX_TOP);
 }
 
 /**

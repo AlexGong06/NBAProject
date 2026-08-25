@@ -5,13 +5,36 @@ import playersRouter from "./routes/players";
 import gamesRouter from "./routes/games";
 import calendarRouter from "./routes/calendar";
 import logger from "../utils/logger";
+import { closeDb } from "../database/database";
 import cors from "cors";
 
 const PORT = Number(process.env.PORT) || 3000;
 
+// ── Who may call this API ───────────────────────────────────────────────────
+//
+// `CORS_ORIGIN` is a comma-separated allowlist — in production, the one static
+// site that should be calling. Unset means allow any origin, which is what
+// local development and the fixture-mode front end need.
+const allowedOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors(
+    allowedOrigins.length > 0
+      ? {
+          // A request with no Origin header is not a browser cross-origin call
+          // — curl, a health check, a server-side fetch. Blocking those breaks
+          // uptime monitoring while stopping nothing.
+          origin: (origin, cb) =>
+            cb(null, !origin || allowedOrigins.includes(origin)),
+        }
+      : undefined,
+  ),
+);
 
 // ── Compress everything ─────────────────────────────────────────────────────
 //
@@ -33,6 +56,13 @@ app.use(compression());
 app.use((_req, res, next) => {
   res.setHeader("Timing-Allow-Origin", "*");
   next();
+});
+
+// Cheap and dependency-free on purpose: this answers "is the process up", not
+// "is Mongo reachable". A health check that touches the database turns one slow
+// query into a restart loop.
+app.get("/health", (_req, res) => {
+  res.json({ ok: true });
 });
 
 // register your router
@@ -62,6 +92,23 @@ server.on("listening", () => {
   }
   logger.info(`Server running on port ${PORT}`);
 });
+
+// ── Shut down when the platform says to ─────────────────────────────────────
+//
+// Render sends SIGTERM on every deploy and every idle spin-down, then SIGKILLs
+// after 30 seconds. Without a handler the process dies mid-request and leaves
+// the Mongo connection for the server to time out.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    logger.info(`${signal} received, shutting down`);
+    server.close(async () => {
+      await closeDb().catch(() => {});
+      process.exit(0);
+    });
+    // Don't let a hung connection hold the process past the platform's patience.
+    setTimeout(() => process.exit(0), 10_000).unref();
+  });
+}
 
 server.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {

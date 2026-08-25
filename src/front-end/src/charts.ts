@@ -215,20 +215,11 @@ export function bumpChart(D: DataSource, dateKey: string) {
   return { grid, segments, gaps, ends, faceRadius: BUMP_FACE };
 }
 
-export type ChartMode = "rank" | "score" | "field";
+export type ChartMode = "rank" | "score";
 
-/**
- * The profile's main chart. Three modes over the same window.
- *
- * `fieldNames` is the cast for field mode — the player and his nearest
- * neighbours on `dateKey`, best first — because who is next to him is a
- * property of the date and only the caller has fetched it. Ignored by the other
- * two modes, and falling back to the player alone keeps the chart drawable
- * while that fetch is still in flight.
- */
+/** The profile's main chart. Two modes over the same window. */
 export function mainChart(
   D: DataSource, name: string, dateKey: string, days: number, mode: ChartMode,
-  fieldNames: string[] = [],
 ) {
   const w = 820, h = 300, pad: Pad = { l: 34, r: 56, t: 14, b: 56 };
   const out = {
@@ -254,58 +245,6 @@ export function mainChart(
   base.forEach((p, i) => {
     if (i % tickEvery === 0 || i === n - 1) out.xTicks.push({ id: i, x: X(i), label: p.date.short });
   });
-
-  if (mode === "field") {
-    // The player's own neighbourhood, not the league's leaders.
-    //
-    // This used to plot the top 5 of the latest date on a fixed #1-#8 axis,
-    // which on the profile of a #300 player was five strangers drawn above an
-    // empty chart. The people worth comparing him to are the ones he is
-    // actually next to.
-    const cast = fieldNames.length ? fieldNames : [name];
-    const series = cast.map((n) => D.history(n, dateKey, days));
-    const { lo, hi } = rankDomain(series);
-    out.grid = rankGrid(lo, hi, w, h, pad);
-
-    cast.forEach((who, i) => {
-      const g = rankGeometry(series[i], w, h, pad, hi, lo);
-      const isSel = who === name;
-      const color = isSel ? C.accentBright : LINE_COLORS[Math.min(i + 1, 4)];
-      g.segments.forEach((s) => out.segments.push({ id: `${who}s${s.id}`, points: s.points, color, width: isSel ? 2.6 : 1.4 }));
-      g.gaps.forEach((s) => out.gaps.push({ ...s, id: `${who}g${s.id}`, color }));
-      const last = g.dots[g.dots.length - 1];
-      if (last) {
-        out.ends.push({
-          id: who,
-          tx: w - pad.r + 10,
-          ty: last.y + 4,
-          color,
-          label: D.rowFor(who, dateKey)?.team ?? who.split(" ").slice(-1)[0],
-        });
-      }
-    });
-
-    // Push the end labels apart where they would overlap.
-    //
-    // The old top-5 view never needed this: ranks 1 through 5 are far apart on
-    // the axis. Neighbours are by definition adjacent, so on the last day they
-    // land within a rank or two of each other and their team abbreviations
-    // print on top of one another — unreadable exactly where the comparison
-    // matters most.
-    const LABEL_GAP = 11;
-    out.ends.sort((a, b) => a.ty - b.ty);
-    for (let i = 1; i < out.ends.length; i++) {
-      const overlap = out.ends[i - 1].ty + LABEL_GAP - out.ends[i].ty;
-      if (overlap > 0) out.ends[i].ty += overlap;
-    }
-
-    out.title = "Rank vs the field";
-    out.subtitle =
-      cast.length > 1
-        ? "This player and his nearest rivals, rank by day"
-        : "Loading the players around him…";
-    return out;
-  }
 
   if (mode === "score") {
     const vals = base.filter((p) => p.score != null).map((p) => p.score as number);

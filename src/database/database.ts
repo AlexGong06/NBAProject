@@ -20,3 +20,8 @@ export async function getDb() {
   }
   return cachedDb;
 }
+
+export async function closeDb() {
+  cachedDb = null;
+  await client.close();
+}

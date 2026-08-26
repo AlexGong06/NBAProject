@@ -1,5 +1,6 @@
 import { C } from "../theme";
 import { HoverButton, SearchIcon } from "./ui";
+import { useIsMobile } from "../use-media-query";
 
 type Props = {
   view: "rankings" | "profile";
@@ -19,6 +20,7 @@ const tabBase: React.CSSProperties = {
 
 export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }: Props) {
   const isRankings = view === "rankings";
+  const isMobile = useIsMobile();
 
   return (
     <div
@@ -26,8 +28,8 @@ export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }:
         height: 64,
         display: "flex",
         alignItems: "center",
-        gap: 32,
-        padding: "0 40px",
+        gap: isMobile ? 14 : 32,
+        padding: isMobile ? "0 14px" : "0 40px",
         borderBottom: `1px solid ${C.lineFaint}`,
         position: "sticky",
         top: 0,
@@ -46,14 +48,16 @@ export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }:
         <div style={{ fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 600 }}>
           MVP Tracker
         </div>
-        <div
-          style={{
-            fontSize: 11, letterSpacing: "0.08em", color: C.textFaint,
-            paddingLeft: 10, borderLeft: `1px solid ${C.lineStrong}`,
-          }}
-        >
-          2025–26
-        </div>
+        {!isMobile && (
+          <div
+            style={{
+              fontSize: 11, letterSpacing: "0.08em", color: C.textFaint,
+              paddingLeft: 10, borderLeft: `1px solid ${C.lineStrong}`,
+            }}
+          >
+            2025–26
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -87,37 +91,51 @@ export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }:
         onClick={onOpenSearch}
         style={{
           display: "flex", alignItems: "center", gap: 10,
-          height: 34, padding: "0 10px 0 12px",
+          height: isMobile ? 38 : 34,
+          width: isMobile ? 38 : undefined,
+          justifyContent: isMobile ? "center" : undefined,
+          padding: isMobile ? 0 : "0 10px 0 12px",
           background: C.surfaceAlt,
           border: `1px solid ${C.lineStrong}`,
           borderRadius: 8, color: C.textFaint, fontSize: 13,
-          cursor: "pointer", minWidth: 240, textAlign: "left",
+          cursor: "pointer", minWidth: isMobile ? 0 : 240, textAlign: "left",
         }}
         hoverStyle={{ borderColor: C.accentDeep, color: C.textDim }}
       >
         <SearchIcon />
-        <span style={{ flex: 1 }}>Search players</span>
-        <span
-          style={{
-            fontSize: 10, letterSpacing: "0.06em", padding: "2px 6px",
-            border: `1px solid ${C.lineStrong}`, borderRadius: 4, color: C.textFaint,
-          }}
-        >
-          ⌘K
-        </span>
+        {/* The label and the shortcut hint are both desktop affordances — a
+            phone has no ⌘K, and the icon alone is understood. */}
+        {!isMobile && (
+          <>
+            <span style={{ flex: 1 }}>Search players</span>
+            <span
+              style={{
+                fontSize: 10, letterSpacing: "0.06em", padding: "2px 6px",
+                border: `1px solid ${C.lineStrong}`, borderRadius: 4, color: C.textFaint,
+              }}
+            >
+              ⌘K
+            </span>
+          </>
+        )}
       </HoverButton>
 
-      <HoverButton
-        onClick={onTogglePanel}
-        style={{
-          height: 34, padding: "0 14px", background: "transparent",
-          border: `1px solid ${C.accentDeep}`, borderRadius: 8,
-          color: C.accentPale, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
-        }}
-        hoverStyle={{ background: C.accentWash, borderColor: C.accent }}
-      >
-        How it works
-      </HoverButton>
+      {/* Dropped on a phone, not shrunk: the formula is reachable from "Open the
+          breakdown" on the board and "See the math" on a profile, so nothing
+          becomes unreachable and the bar stops overflowing. */}
+      {!isMobile && (
+        <HoverButton
+          onClick={onTogglePanel}
+          style={{
+            height: 34, padding: "0 14px", background: "transparent",
+            border: `1px solid ${C.accentDeep}`, borderRadius: 8,
+            color: C.accentPale, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
+          }}
+          hoverStyle={{ background: C.accentWash, borderColor: C.accent }}
+        >
+          How it works
+        </HoverButton>
+      )}
     </div>
   );
 }

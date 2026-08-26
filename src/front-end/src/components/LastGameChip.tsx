@@ -17,6 +17,7 @@ import type { LastGame } from "../data/types";
 import { teamLogoUrl } from "../data/team-logo";
 import { daysBeforeLabel, scoreline, shortDate, venueLabel } from "../data/last-game";
 import { HoverButton, TeamLogo } from "./ui";
+import { useIsMobile } from "../use-media-query";
 
 type Props = {
   game: LastGame;
@@ -27,6 +28,7 @@ type Props = {
 };
 
 export default function LastGameChip({ game, viewedDateKey, onOpen, wide = false }: Props) {
+  const isMobile = useIsMobile();
   const logo = wide ? 26 : 22;
   const badge = wide ? 22 : 19;
 
@@ -51,7 +53,9 @@ export default function LastGameChip({ game, viewedDateKey, onOpen, wide = false
       }}
       hoverStyle={{ borderColor: C.accentDeep, background: "rgba(145,132,217,0.10)" }}
     >
-      <span style={{ display: "flex", alignItems: "center", gap }}>
+      {/* Nothing in this row can shrink — the teams, the scoreline and the CTA
+          are all nowrap — so on a phone it wraps instead of overflowing. */}
+      <span style={{ display: "flex", alignItems: "center", gap, flexWrap: isMobile ? "wrap" : "nowrap" }}>
         <span
           style={{
             width: badge, height: badge, borderRadius: 5, flex: "none",
@@ -79,7 +83,7 @@ export default function LastGameChip({ game, viewedDateKey, onOpen, wide = false
         <TeamLogo src={teamLogoUrl(game.opponentTeamId)} abbr={game.opponentAbbr} size={logo} dim labelled={false} />
 
         {wide && (
-          <span style={{ marginLeft: "auto", fontSize: 12, color: C.accentPale, whiteSpace: "nowrap" }}>
+          <span style={{ marginLeft: isMobile ? 0 : "auto", fontSize: 12, color: C.accentPale, whiteSpace: "nowrap" }}>
             {game.hasHighlight ? "▶ Watch highlights" : "View box score"}
           </span>
         )}

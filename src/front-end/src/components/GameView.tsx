@@ -12,6 +12,7 @@ import React from "react";
 import { C, label, tabular } from "../theme";
 import type { BoxScoreRow, PlayerGame } from "../data/types";
 import { teamLogoUrl } from "../data/team-logo";
+import { useIsMobile } from "../use-media-query";
 import { scoreline, shortDate, venueLabel } from "../data/last-game";
 import { THUMBNAIL_SIZES, videoThumbnailUrl } from "../data/video-thumbnail";
 import { ChevronLeft, ChevronRight, HoverButton, PlayIcon, TeamLogo } from "./ui";
@@ -91,6 +92,7 @@ export default function GameView({
 }: Props) {
   const periods = Math.max(game.quarters.team.length, game.quarters.opponent.length);
   const labels = periodLabels(periods);
+  const isMobile = useIsMobile();
 
   const stepBtn = (enabled: boolean): React.CSSProperties => ({
     width: 32, height: 32, display: "grid", placeItems: "center",
@@ -178,7 +180,13 @@ export default function GameView({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 20, marginTop: 20 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) 340px",
+          gap: 20, marginTop: 20,
+        }}
+      >
         {/* ── Highlight reel ─────────────────────────────────────────── */}
         <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, background: C.gameSurface, overflow: "hidden" }}>
           <div style={{ position: "relative", aspectRatio: "16 / 9", background: C.gameSurface }}>
@@ -380,6 +388,9 @@ export default function GameView({
 
 const BOX_GRID = "minmax(0, 1fr) 64px 78px 64px 64px 64px 72px";
 
+/** Fixed columns plus gaps plus room for a name — what BOX_GRID needs to read. */
+const BOX_MIN_WIDTH = 580;
+
 type BoxTotals = { minutes: number; points: number; rebounds: number; assists: number };
 
 function totalsOf(rows: BoxScoreRow[]): BoxTotals {
@@ -407,6 +418,7 @@ function BoxScore({
   // Held as a side rather than a team id: stepping to the next game keeps the
   // tab meaningful, where a stored id would point at a team no longer playing.
   const [side, setSide] = React.useState<"team" | "opponent">("team");
+  const isMobile = useIsMobile();
 
   const bySide = React.useMemo(() => {
     const split = (own: boolean) =>
@@ -431,7 +443,15 @@ function BoxScore({
   const totalCell: React.CSSProperties = { ...cell, color: C.textDim };
 
   return (
-    <div style={{ marginTop: 20, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
+    // Seven columns of box score do not fit a phone, and every one of them is
+    // a stat someone came here to read. The table scrolls sideways in its own
+    // box instead of being thinned out.
+    <div
+      style={{
+        marginTop: 20, border: `1px solid ${C.line}`, borderRadius: 14,
+        overflowX: isMobile ? "auto" : "hidden", overflowY: "hidden",
+      }}
+    >
       <div style={{ background: C.surfaceSunk, padding: "14px 18px", ...label }}>Box score</div>
 
       <div
@@ -477,6 +497,7 @@ function BoxScore({
       <div
         style={{
           display: "grid", gridTemplateColumns: BOX_GRID, gap: 12,
+          minWidth: isMobile ? BOX_MIN_WIDTH : undefined,
           padding: "8px 18px", background: C.tableHead,
           fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost,
         }}
@@ -494,6 +515,7 @@ function BoxScore({
             key={r.playerId}
             style={{
               display: "grid", gridTemplateColumns: BOX_GRID, gap: 12,
+              minWidth: isMobile ? BOX_MIN_WIDTH : undefined,
               padding: "10px 18px", alignItems: "center",
               background: isSelf ? C.boxRowSelf : C.surface,
               borderTop: `1px solid ${C.line}`,
@@ -533,6 +555,7 @@ function BoxScore({
       <div
         style={{
           display: "grid", gridTemplateColumns: BOX_GRID, gap: 12,
+          minWidth: isMobile ? BOX_MIN_WIDTH : undefined,
           padding: "10px 18px", alignItems: "center",
           background: C.surfaceSunk, borderTop: `1px solid ${C.lineStrong}`,
         }}

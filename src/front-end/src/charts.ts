@@ -217,11 +217,29 @@ export function bumpChart(D: DataSource, dateKey: string) {
 
 export type ChartMode = "rank" | "score";
 
+/**
+ * The chart's own coordinate space, which is also its aspect ratio.
+ *
+ * The SVG is drawn at `width: 100%`, so the viewBox is scaled to fit and the
+ * label text scales with it. Rendering the 820-wide desktop box on a 358px
+ * phone shrinks 10px labels to about 4px — legible in the sense that pixels are
+ * present. The narrow box keeps text near its intended size.
+ */
+export const CHART_SIZE = {
+  desktop: { w: 820, h: 300 },
+  mobile: { w: 360, h: 250 },
+} as const;
+
 /** The profile's main chart. Two modes over the same window. */
 export function mainChart(
   D: DataSource, name: string, dateKey: string, days: number, mode: ChartMode,
+  size: { w: number; h: number } = CHART_SIZE.desktop,
 ) {
-  const w = 820, h = 300, pad: Pad = { l: 34, r: 56, t: 14, b: 56 };
+  const narrow = size.w < 500;
+  const w = size.w, h = size.h;
+  const pad: Pad = narrow
+    ? { l: 26, r: 34, t: 12, b: 42 }
+    : { l: 34, r: 56, t: 14, b: 56 };
   const out = {
     segments: [] as Segment[],
     gaps: [] as Gap[],
@@ -241,9 +259,16 @@ export function mainChart(
   // They are carried forward now, so the line simply runs flat through them —
   // which is what happened. Nothing was missed; nobody played.
 
-  const tickEvery = n > 20 ? 5 : n > 10 ? 3 : 2;
+  // Half as many ticks in the narrow box — the same count that is comfortable
+  // across 820px collides across 360.
+  const tickEvery = (n > 20 ? 5 : n > 10 ? 3 : 2) * (narrow ? 2 : 1);
   base.forEach((p, i) => {
-    if (i % tickEvery === 0 || i === n - 1) out.xTicks.push({ id: i, x: X(i), label: p.date.short });
+    if (i % tickEvery !== 0 && i !== n - 1) return;
+    // The final tick is always drawn, so on a narrow chart it can land on top
+    // of the one before it. Drop that neighbour rather than overprint.
+    const last = out.xTicks[out.xTicks.length - 1];
+    if (last && i === n - 1 && X(i) - last.x < (narrow ? 42 : 30)) out.xTicks.pop();
+    out.xTicks.push({ id: i, x: X(i), label: p.date.short });
   });
 
   if (mode === "score") {

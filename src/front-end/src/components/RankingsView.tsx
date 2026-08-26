@@ -6,6 +6,7 @@ import { headshotUrl } from "../data/headshot";
 import SeasonRibbon from "./SeasonRibbon";
 import LastGameChip from "./LastGameChip";
 import { shortDate } from "../data/last-game";
+import { useIsMobile } from "../use-media-query";
 import {
   ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Headshot, HoverBox, HoverButton, PlayIcon,
 } from "./ui";
@@ -48,6 +49,7 @@ export default function RankingsView({
 }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const isMobile = useIsMobile();
 
   const snap = D.snapshot(dateKey);
 
@@ -105,13 +107,33 @@ export default function RankingsView({
   })();
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 48, padding: "40px 40px 72px" }}>
+    <div
+      style={{
+        display: "grid",
+        // The sidebar drops below the board rather than beside it. 340px of
+        // fixed rail plus a readable board needs ~700px that a phone has not got.
+        gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) 340px",
+        gap: isMobile ? 28 : 48,
+        padding: isMobile ? "20px 16px 56px" : "40px 40px 72px",
+      }}
+    >
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, marginBottom: 28 }}>
+        <div
+          style={{
+            display: "flex",
+            // Side by side these two fight for width and the subtitle collapses
+            // into a five-line ribbon. Stacked, the date gets the full width.
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "stretch" : "flex-end",
+            justifyContent: "space-between",
+            gap: isMobile ? 14 : 24,
+            marginBottom: isMobile ? 20 : 28,
+          }}
+        >
           <div>
             <div style={{ ...label, marginBottom: 10 }}>Daily leaderboard</div>
-            <h1 style={{ margin: 0, fontSize: 42, fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.05 }}>
+            <h1 style={{ margin: 0, fontSize: isMobile ? 26 : 42, fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.05 }}>
               {snap ? snap.date.long : ""}
             </h1>
             <div style={{ marginTop: 8, fontSize: 13, color: C.textDim }}>
@@ -129,7 +151,7 @@ export default function RankingsView({
             <HoverButton
               onClick={() => onPickDate(D.TODAY_KEY)}
               style={{
-                height: 34, padding: "0 14px", background: "transparent",
+                height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
                 border: `1px solid ${C.lineStrong}`, borderRadius: 8,
                 color: C.textDim, fontSize: 13, cursor: "pointer",
               }}
@@ -195,16 +217,16 @@ export default function RankingsView({
               style={{
                 border: `1px solid ${C.lineStrong}`, borderRadius: 14,
                 background: "linear-gradient(160deg, #262838 0%, #1c1e2b 62%)",
-                padding: 28, display: "grid",
-                gridTemplateColumns: "104px minmax(0, 1fr) 200px",
-                gap: 28, alignItems: "center",
+                padding: isMobile ? 18 : 28, display: "grid",
+                gridTemplateColumns: isMobile ? "62px minmax(0, 1fr)" : "104px minmax(0, 1fr) 200px",
+                gap: isMobile ? 14 : 28, alignItems: isMobile ? "start" : "center",
                 boxShadow: "0 16px 40px rgba(0,0,0,0.45)", marginBottom: 20,
               }}
             >
               <HoverBox
                 onClick={() => onOpenPlayer(hero.player)}
                 style={{
-                  position: "relative", width: 104, height: 104, borderRadius: 999,
+                  position: "relative", width: isMobile ? 62 : 104, height: isMobile ? 62 : 104, borderRadius: 999,
                   background: C.line, border: `1px solid ${C.lineStrong}`,
                   display: "grid", placeItems: "center", cursor: "pointer", overflow: "hidden",
                 }}
@@ -212,8 +234,8 @@ export default function RankingsView({
                 <Headshot
                   src={headshotUrl(hero)}
                   initials={initials(hero.player)}
-                  size={104}
-                  fontSize={26}
+                  size={isMobile ? 62 : 104}
+                  fontSize={isMobile ? 18 : 26}
                 />
               </HoverBox>
 
@@ -229,7 +251,7 @@ export default function RankingsView({
                 </div>
                 <HoverBox
                   onClick={() => onOpenPlayer(hero.player)}
-                  style={{ fontSize: 34, fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.1, cursor: "pointer" }}
+                  style={{ fontSize: isMobile ? 21 : 34, fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.1, cursor: "pointer" }}
                   hoverStyle={{ color: C.accentPale }}
                 >
                   {hero.player}
@@ -237,7 +259,7 @@ export default function RankingsView({
                 <div style={{ marginTop: 6, fontSize: 13, color: C.textDim }}>{d.meta}</div>
                 <div style={{ marginTop: 18 }}>
                   <SplitBar wcPct={d.wcPct} tsPct={d.tsPct} height={10} fills={[C.line, C.accent, C.accentDeep]} />
-                  <div style={{ display: "flex", gap: 22, marginTop: 10, fontSize: 11, color: C.textDim }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? "8px 14px" : 22, marginTop: 10, fontSize: 11, color: C.textDim }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
                       <span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />
                       Win contribution {fmt(hero.winContribution)}
@@ -272,7 +294,13 @@ export default function RankingsView({
                 )}
               </div>
 
-              <div style={{ textAlign: "right" }}>
+              <div
+                style={
+                  isMobile
+                    ? { textAlign: "left", gridColumn: "1 / -1", borderTop: `1px solid ${C.line}`, paddingTop: 14 }
+                    : { textAlign: "right" }
+                }
+              >
                 <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textFaint }}>
                   MVP value
                 </div>
@@ -311,8 +339,15 @@ export default function RankingsView({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "34px 56px minmax(0, 1fr) 124px 224px 96px 34px",
-                  alignItems: "center", gap: 16, padding: "14px 18px",
+                  // Seven columns need ~570px. On a phone the sparkline is
+                  // dropped and the last-game chip moves to its own row below
+                  // (see `order` on its container), leaving five.
+                  gridTemplateColumns: isMobile
+                    ? "24px 40px minmax(0, 1fr) 62px 30px"
+                    : "34px 56px minmax(0, 1fr) 124px 224px 96px 34px",
+                  alignItems: "center",
+                  gap: isMobile ? 10 : 16,
+                  padding: isMobile ? "12px 12px" : "14px 18px",
                 }}
               >
                 <div style={{ fontSize: 18, fontWeight: 500, color: C.textFaint, ...tabular }}>
@@ -324,7 +359,7 @@ export default function RankingsView({
                   onMouseEnter={() => setHover(p.player)}
                   onMouseLeave={() => setHover(null)}
                   style={{
-                    position: "relative", width: 52, height: 52, borderRadius: 999,
+                    position: "relative", width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, borderRadius: 999,
                     background: C.raised, border: `1px solid ${C.lineStrong}`,
                     display: "grid", placeItems: "center", cursor: "pointer", overflow: "hidden",
                   }}
@@ -353,7 +388,7 @@ export default function RankingsView({
                   <HoverBox
                     onClick={() => onOpenPlayer(p.player)}
                     style={{
-                      fontSize: 17, fontWeight: 500, letterSpacing: "-0.01em", cursor: "pointer",
+                      fontSize: isMobile ? 15 : 17, fontWeight: 500, letterSpacing: "-0.01em", cursor: "pointer",
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                     }}
                     hoverStyle={{ color: C.accentPale }}
@@ -363,15 +398,19 @@ export default function RankingsView({
                   <div style={{ fontSize: 12, color: C.textFaint, marginTop: 2 }}>{d.meta}</div>
                 </div>
 
-                <div>
-                  <svg width="100%" height={30} viewBox="0 0 116 30" style={{ display: "block", overflow: "visible" }}>
-                    <polyline points={sp.points} fill="none" stroke={C.textFaint} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" />
-                    <circle cx={sp.x} cy={sp.y} r={2.5} fill={C.accentBright} />
-                  </svg>
-                  <div style={{ fontSize: 10, color: C.textGhost, marginTop: 5 }}>{d.splitLabel}</div>
-                </div>
+                {!isMobile && (
+                  <div>
+                    <svg width="100%" height={30} viewBox="0 0 116 30" style={{ display: "block", overflow: "visible" }}>
+                      <polyline points={sp.points} fill="none" stroke={C.textFaint} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" />
+                      <circle cx={sp.x} cy={sp.y} r={2.5} fill={C.accentBright} />
+                    </svg>
+                    <div style={{ fontSize: 10, color: C.textGhost, marginTop: 5 }}>{d.splitLabel}</div>
+                  </div>
+                )}
 
-                <div style={{ minWidth: 0 }}>
+                {/* `order` moves this past the value and chevron, so grid
+                    auto-placement drops it onto a second row of its own. */}
+                <div style={isMobile ? { minWidth: 0, order: 1, gridColumn: "1 / -1" } : { minWidth: 0 }}>
                   {p.lastGame ? (
                     <LastGameChip
                       game={p.lastGame}
@@ -387,7 +426,7 @@ export default function RankingsView({
                 </div>
 
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 20, fontWeight: 500, ...tabular, letterSpacing: "-0.02em" }}>
+                  <div style={{ fontSize: isMobile ? 16 : 20, fontWeight: 500, ...tabular, letterSpacing: "-0.02em" }}>
                     {fmt(p.mvpValue)}
                   </div>
                   <div style={{ fontSize: 11, color: C.textFaint, marginTop: 2 }}>{deltaShort(p.delta)}</div>
@@ -410,10 +449,10 @@ export default function RankingsView({
                 <div
                   style={{
                     borderTop: `1px solid ${C.line}`, background: C.surfaceSunk,
-                    padding: "20px 18px 18px 108px",
+                    padding: isMobile ? "16px 12px" : "20px 18px 18px 108px",
                   }}
                 >
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "18px 12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 3 : 6}, 1fr)`, gap: "18px 12px" }}>
                     {statList(p).map((s) => (
                       <div key={s.label}>
                         <div style={{ fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost }}>
@@ -465,7 +504,7 @@ export default function RankingsView({
                     <HoverButton
                       onClick={() => onOpenPlayer(p.player)}
                       style={{
-                        height: 34, padding: "0 14px", background: "transparent",
+                        height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
                         border: `1px solid ${C.accentDeep}`, borderRadius: 8,
                         color: C.accentPale, fontSize: 13, cursor: "pointer",
                       }}
@@ -476,7 +515,7 @@ export default function RankingsView({
                     <HoverButton
                       onClick={onTogglePanel}
                       style={{
-                        height: 34, padding: "0 14px", background: "transparent",
+                        height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
                         border: `1px solid ${C.lineStrong}`, borderRadius: 8,
                         color: C.textDim, fontSize: 13, cursor: "pointer",
                       }}

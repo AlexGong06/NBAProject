@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { C, LEAGUE_NOTES, fmt, initials, label, statList, tabular } from "../theme";
-import { mainChart } from "../charts";
+import { CHART_SIZE, mainChart } from "../charts";
 import type { ChartMode } from "../charts";
 import type { DataSource, FieldWindow, PlayerGame, PlayerSeason } from "../data/types";
 import { headshotUrl } from "../data/headshot";
+import { useIsMobile } from "../use-media-query";
 import { shortDate } from "../data/last-game";
 import SeasonRibbon from "./SeasonRibbon";
 import GameView from "./GameView";
@@ -45,6 +46,7 @@ export default function PlayerProfileView({
 }: Props) {
   const [mode, setMode] = useState<ChartMode>("rank");
   const [range, setRange] = useState(14);
+  const isMobile = useIsMobile();
 
   // The season is always fetched, even for a player already in the board.
   //
@@ -186,7 +188,8 @@ export default function PlayerProfileView({
     .map((x) => x.rank as number);
   const peak = windowRanks.length ? Math.min(...windowRanks) : null;
 
-  const chart = mainChart(D, p.player, dateKey, range, mode);
+  const chartSize = isMobile ? CHART_SIZE.mobile : CHART_SIZE.desktop;
+  const chart = mainChart(D, p.player, dateKey, range, mode, chartSize);
   const games = D.nextGames(p.player);
 
   const wcPct = b ? ((b.winContribution / totalHalf) * 100).toFixed(1) : "0";
@@ -225,14 +228,17 @@ export default function PlayerProfileView({
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div
         style={{
-          display: "grid", gridTemplateColumns: "132px minmax(0, 1fr) auto",
-          gap: 28, alignItems: "center", paddingBottom: 28,
+          display: "grid",
+          // The rank/value pair is the `auto` column. On a phone it wraps to a
+          // row of its own beneath the portrait and name.
+          gridTemplateColumns: isMobile ? "76px minmax(0, 1fr)" : "132px minmax(0, 1fr) auto",
+          gap: isMobile ? 16 : 28, alignItems: "center", paddingBottom: isMobile ? 20 : 28,
           borderBottom: `1px solid ${C.lineFaint}`,
         }}
       >
         <div
           style={{
-            position: "relative", width: 132, height: 132, borderRadius: 999,
+            position: "relative", width: isMobile ? 76 : 132, height: isMobile ? 76 : 132, borderRadius: 999,
             background: C.raised, border: `1px solid ${C.lineStrong}`, overflow: "hidden",
           }}
         >
@@ -248,7 +254,7 @@ export default function PlayerProfileView({
           <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: C.accent, marginBottom: 8 }}>
             {D.TEAMS[p.team] ?? p.team}
           </div>
-          <h1 style={{ margin: 0, fontSize: 46, fontWeight: 500, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 26 : 46, fontWeight: 500, letterSpacing: "-0.025em", lineHeight: 1.02 }}>
             {p.player}
           </h1>
           <div style={{ marginTop: 10, fontSize: 13, color: C.textDim }}>
@@ -270,12 +276,18 @@ export default function PlayerProfileView({
             is. The old label read "Rank today" over whatever row happened to be
             in memory — for a player the board saw once in November, that was a
             four-month-old rank out of a 50-man field, presented as current. */}
-        <div style={{ display: "flex", gap: 40, alignItems: "flex-start" }}>
+        <div
+          style={
+            isMobile
+              ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, gridColumn: "1 / -1", marginTop: 4 }
+              : { display: "flex", gap: 40, alignItems: "flex-start" }
+          }
+        >
           <div>
             <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textFaint }}>
               Rank on {date.short}
             </div>
-            <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular, color: C.accentPale }}>
+            <div style={{ fontSize: isMobile ? 30 : 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular, color: C.accentPale }}>
               {row ? (field ? `#${field.rank}` : "…") : "—"}
             </div>
             <div style={{ fontSize: 11, color: C.textFaint }}>
@@ -292,7 +304,7 @@ export default function PlayerProfileView({
             <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textFaint }}>
               MVP value
             </div>
-            <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular }}>
+            <div style={{ fontSize: isMobile ? 30 : 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular }}>
               {row ? fmt(row.mvpValue) : "—"}
             </div>
             <div style={{ fontSize: 11, color: C.textFaint }}>
@@ -348,7 +360,7 @@ export default function PlayerProfileView({
         <HoverButton
           onClick={() => onPickDate(D.TODAY_KEY)}
           style={{
-            marginLeft: "auto", height: 30, padding: "0 12px",
+            marginLeft: "auto", height: 30, padding: "0 12px", whiteSpace: "nowrap",
             background: "transparent", border: `1px solid ${C.lineStrong}`,
             borderRadius: 8, color: C.textDim, fontSize: 12, cursor: "pointer",
           }}
@@ -428,7 +440,14 @@ export default function PlayerProfileView({
         )
       ) : (
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 40, paddingTop: 32 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) 380px",
+          gap: isMobile ? 24 : 40,
+          paddingTop: isMobile ? 20 : 32,
+        }}
+      >
         <div style={{ minWidth: 0 }}>
           {/* ── Chart ───────────────────────────────────────────────── */}
           <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, background: C.surface, padding: "22px 24px 18px" }}>
@@ -455,7 +474,7 @@ export default function PlayerProfileView({
               </div>
             </div>
 
-            <svg width="100%" viewBox="0 0 820 300" style={{ display: "block", overflow: "visible" }}>
+            <svg width="100%" viewBox={`0 0 ${chartSize.w} ${chartSize.h}`} style={{ display: "block", overflow: "visible" }}>
               {chart.grid.map((g) => (
                 <line key={`l${g.id}`} x1={g.x1} y1={g.y} x2={g.x2} y2={g.y} stroke={C.raised} strokeWidth={1} />
               ))}
@@ -491,7 +510,7 @@ export default function PlayerProfileView({
             </div>
             <div
               style={{
-                display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 1,
+                display: "grid", gridTemplateColumns: `repeat(${isMobile ? 3 : 6}, 1fr)`, gap: 1,
                 background: C.line, border: `1px solid ${C.line}`,
                 borderRadius: 12, overflow: "hidden",
               }}
@@ -520,10 +539,19 @@ export default function PlayerProfileView({
                 <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: "-0.015em" }}>Next 10 games</div>
                 <div style={{ fontSize: 12, color: C.textFaint }}>Tickets via partner marketplaces</div>
               </div>
-              <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden" }}>
+              {/* Six columns will not fit a phone and none of them is
+                  droppable, so the table scrolls sideways inside its own box
+                  rather than forcing the page to. */}
+              <div
+                style={{
+                  border: `1px solid ${C.line}`, borderRadius: 12,
+                  overflowX: isMobile ? "auto" : "hidden", overflowY: "hidden",
+                }}
+              >
                 <div
                   style={{
                     display: "grid", gridTemplateColumns: "96px 44px minmax(0, 1fr) 96px 104px 116px",
+                    minWidth: isMobile ? 560 : undefined,
                     gap: 14, alignItems: "center", padding: "10px 18px",
                     background: C.surfaceSunk, borderBottom: `1px solid ${C.line}`,
                     fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost,
@@ -536,6 +564,7 @@ export default function PlayerProfileView({
                     key={g.id}
                     style={{
                       display: "grid", gridTemplateColumns: "96px 44px minmax(0, 1fr) 96px 104px 116px",
+                    minWidth: isMobile ? 560 : undefined,
                       gap: 14, alignItems: "center", padding: "12px 18px",
                       background: C.surface, borderBottom: `1px solid ${C.raised}`,
                     }}

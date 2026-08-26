@@ -8,19 +8,14 @@
 // never called) are superseded by `PlayerDailyValues` — 83,054 rows, 582
 // players, every regular-season date, formula v3.
 //
-// ── Why this refuses to run on trust ────────────────────────────────────────
+// **The delete is gated on proving the replacement exists first.** The old rows
+// hold VORP, win shares and BPM scraped mid-season, and Basketball Reference
+// serves only current-season totals — so deleting them is irreversible in a way
+// recomputing from the NBA API is not.
 //
-// The old rows hold VORP, win shares and box plus/minus scraped from Basketball
-// Reference during the season. Those numbers cannot be re-fetched: the site
-// serves current-season totals and that season has ended. Deleting them is
-// therefore irreversible in a way that recomputing from the NBA API is not.
-//
-// So the delete is gated on proving the replacement exists first. Every old
-// (player, date) must either have a counterpart in PlayerDailyValues, or fall
-// on a date with no regular-season games — Thanksgiving, Christmas Eve, the NBA
-// Cup final, the All-Star break, and the day after the season ended. On those
-// six dates the old scraper simply restated the previous day's totals, so there
-// is no fact to lose. Any other gap aborts the run.
+// Every old (player, date) must have a counterpart in PlayerDailyValues, or
+// fall on a date with no regular-season games, where the old scraper simply
+// restated the previous day. Any other gap aborts the run.
 
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";

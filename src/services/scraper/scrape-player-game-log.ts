@@ -1,16 +1,12 @@
 // Per-player game logs — how many games a player had appeared in on a date.
 //
-// The daily pipeline does not need this. A player's season row is cumulative,
-// so a scrape on any day already reports that day's games played. This exists
-// for history: rows collected before `gamesPlayed` was captured have no other
-// way to recover it, and season-final totals cannot be applied backwards
-// without claiming things about days that had not happened yet.
+// Legacy: used only by `pnpm fetch-game-logs` and `pnpm migrate`, to recover
+// `gamesPlayed` for rows collected before it was captured. Season-final totals
+// cannot be applied backwards without claiming things about days that had not
+// happened yet.
 //
-// No browser. The game-log page is plain server-rendered HTML — unlike the team
-// page, whose tables sit inside HTML comments and are only revealed by
-// Basketball Reference's own JavaScript. A fetch takes ~0.15s against ~2.5s for
-// a Playwright page load, and it makes the parser a pure function over a
-// string, so it can be tested against a saved page with no network at all.
+// No browser — the game-log page is plain server-rendered HTML, so the parser
+// is a pure function over a string and can be tested against a saved page.
 //
 // Two traps, both verified against live markup and both covered by tests:
 //

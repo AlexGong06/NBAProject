@@ -4,27 +4,17 @@
 //   pnpm fetch-summaries            dry run — fetches, reports, writes nothing
 //   pnpm fetch-summaries --apply    writes GameSummaries2526
 //
-// ── Why this exists, and why it uses scoreboardv3 ──────────────────────────
+// The game logs already give the final score (summed player points) and the
+// overtime count (team minutes: 240 in regulation, +25 per period). The
+// quarter-by-quarter line score is the one thing worth a request.
 //
-// `PlayerGameLogs2526` can already answer most of what a box score needs. The
-// final score is the sum of each side's player points (validated against all
-// 1,230 games), and the number of overtime periods falls out of team minutes —
-// regulation is 240, each extra period adds 25.
+// **`boxscoresummaryv2` is broken for this season** — every 2025-26 game returns
+// null quarters and a pre-game status, while 2023-24 works. Known NBA-side bug,
+// swar/nba_api#596, closed by PR #609 deprecating v2 in favour of v3.
 //
-// What it cannot answer is the quarter-by-quarter line score, and that is the
-// one thing here worth a request.
-//
-// The obvious source, `boxscoresummaryv2`, is **broken for this season**: every
-// 2025-26 game comes back with null quarters, a null final, and a pre-game
-// status string, while the same endpoint returns real data for 2023-24. That is
-// a known NBA-side bug — swar/nba_api#596, closed by PR #609, which deprecates
-// the v2 scoreboard in favour of v3.
-//
-// `scoreboardv3` works, and is keyed by DATE rather than by game. So this is 164
-// requests for the whole season rather than 1,230 — one per game date.
-//
-// The v3 endpoints answer with named JSON rather than the `headers`/`rowSet`
-// envelope, which is why this calls `nbaStatsJson` rather than `nbaStats`.
+// `scoreboardv3` is keyed by DATE, so this is 164 requests rather than 1,230.
+// It answers with named JSON rather than the `headers`/`rowSet` envelope, hence
+// `nbaStatsJson` rather than `nbaStats`.
 
 import { MongoClient, type AnyBulkWriteOperation } from "mongodb";
 import dotenv from "dotenv";

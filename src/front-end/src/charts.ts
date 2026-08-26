@@ -69,15 +69,10 @@ export function rankGeometry(
 /**
  * The rank window to draw, given every series that will be plotted.
  *
- * The axis used to be hardcoded to #1-#8, which was fine while only the top
- * twenty were reachable. Now that any of 582 players can be opened, a fixed
- * top-8 axis draws everyone else below the bottom edge — a chart that is
- * completely empty, which reads as "no data" rather than "off the scale".
- *
- * Contenders keep the familiar #1-#8 view so the leaderboard's charts are
- * unchanged; anyone below that gets a window around his own range, which is
- * where his movement actually is. Taking every series at once is what lets the
- * field view frame a player against his neighbours instead of against #1.
+ * Never hardcode #1-#8: any of 582 players can be opened, and a fixed top-8
+ * axis draws everyone else below the bottom edge — an empty chart, which reads
+ * as "no data" rather than "off the scale". Contenders keep the familiar view;
+ * anyone below gets a window around his own range.
  */
 export function rankDomain(series: HistoryPoint[][]): { lo: number; hi: number } {
   const ranks: number[] = [];
@@ -132,21 +127,12 @@ export function sparkline(D: DataSource, name: string, dateKey: string, w: numbe
 const BUMP_FACE = 11;
 
 /**
- * "Race to #1" — the top five on the selected date, rank by day, last 14.
+ * "Race to #1" — the top five **on the selected date**, rank by day, last 14.
  *
- * Three things used to be wrong here, and all three were the chart quietly
- * describing something other than what it claimed:
- *
- * 1. **It drew outside its own card.** `rankGeometry` was called with a
- *    hardcoded max rank of 8, so a player who slipped to #12 mapped to y=230 in
- *    a 176-tall box and painted over the page below it. The axis now follows the
- *    players actually plotted, via the same `rankDomain` the profile uses.
- * 2. **It plotted the wrong five.** The cast came from `D.TODAY_KEY` — the
- *    season-final leaders — while the lines were drawn over the selected date's
- *    window. On Jan 20 that showed two players who were not in Jan 20's top
- *    five, directly above a board listing the five who were.
- * 3. **It labelled teams.** Every line was already a player; only the label was
- *    a team abbreviation. They are headshots now.
+ * The cast must come from `dateKey`, not from `D.TODAY_KEY`: drawing the
+ * season-final leaders over an earlier date's window puts players in the chart
+ * who are not on the board directly beneath it. The axis follows the players
+ * actually plotted, or a slip to #12 paints outside a 176-tall box.
  */
 export function bumpChart(D: DataSource, dateKey: string) {
   const w = 300, h = 176, pad: Pad = { l: 22, r: 34, t: 14, b: 26 };

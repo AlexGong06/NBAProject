@@ -3,24 +3,16 @@
 //   GET /games/:gameId
 //   GET /games/last?player=Nikola%20Jokic&date=4-12-2026
 //
-// ── Where a game's numbers come from ───────────────────────────────────────
-//
-// Two collections, each authoritative for different things:
-//
-//   PlayerGameLogs2526   every player's line, for both teams, keyed by gameId.
-//                        The box score is a query, not a join — both sides are
-//                        already in there.
-//   GameSummaries2526    the scoreboard: quarter scores, which side was home,
-//                        and whether the game was played at a neutral site.
+// Two collections: `PlayerGameLogs2526` holds every player's line for both
+// teams keyed by gameId (so the box score is a query, not a join), and
+// `GameSummaries2526` holds the quarter scores, home side and neutral-site flag.
 //
 // The final score is *derived* by summing each side's player points rather than
-// read from the summary. Both agree on all 1,230 games (see `pnpm verify-games`),
-// and deriving it means the header score and the box score beneath it cannot
-// disagree — they are the same numbers added up the same way.
+// read from the summary, so the header and the box score beneath it cannot
+// disagree. Both agree on all 1,230 games — see `pnpm verify-games`.
 //
-// Home/away comes from the summary, never from the log row's `isHome`. On a
-// neutral-site game — the NBA Cup games in Las Vegas — both teams' MATCHUP
-// strings read "@" and neither is hosting.
+// Home/away comes from the summary, never from the log row's `isHome`: on a
+// neutral-site game both teams' MATCHUP strings read "@" and neither hosts.
 
 import { Router } from "express";
 import logger from "../../utils/logger";

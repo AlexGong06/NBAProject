@@ -41,43 +41,27 @@ export const FullPlayerSummarySchema = z.object({
 export type FullPlayerSummary = z.infer<typeof FullPlayerSummarySchema>;
 
 /**
- * Which revision of the scoring formula produced a row's mvpValue.
+ * Which revision of the scoring formula produced a row's mvpValue. The app
+ * connects points across days, which only means anything if they were measured
+ * with the same ruler — this is what lets a formula change read as a
+ * discontinuity rather than as movement that never happened.
  *
- * The app is a time series: it draws rank deltas and connects points across
- * days. That only means anything if consecutive days were measured with the
- * same ruler. Stamping the version is what lets a formula change be shown as a
- * discontinuity rather than rendered as movement that never happened.
+ * 1 — no availability term.
+ * 2 — availability scales the whole score, not just the win half.
+ * 3 — quality of impact becomes 0.4(PIE × 100) + 0.2(Net Rating); source moved
+ *     to the NBA stats API, so rates are fractions and usage is not divided.
  *
- * 1 — original. No availability term; a player was scored the same whether he
- *     appeared in every game or a third of them.
- * 2 — availability (gamesPlayed / teamGamesPlayed) scaling the whole score,
- *     not just the win half. Absence is penalised harder than pro-rating.
- * 3 — quality of impact becomes 0.4(PIE × 100) + 0.2(Net Rating), replacing
- *     VORP, Win Shares and BPM. Source moved from Basketball Reference to the
- *     NBA stats API, so rates are now stored as fractions and usage is no
- *     longer divided by 100. Absence is penalised once rather than twice,
- *     since PIE and net rating are rates and do not accrue.
- *
- * Rows written before this field existed have no version and are version 1.
- * Scores are only comparable within a version.
+ * Unversioned rows are version 1. Scores compare only within a version.
  */
 export const CURRENT_FORMULA_VERSION = 3;
 
 /**
- * Every intermediate term of the scoring formula, stored alongside the result.
+ * Every intermediate term of the scoring formula, stored alongside the result,
+ * so the browser stays a pure view layer and never re-derives a score.
  *
- * These are not extra work — `scoreBreakdown()` already computes all of them to
- * arrive at `mvpValue`. Previously only the final number was kept and the rest
- * were discarded, which forced the front end to re-run the whole formula from
- * the raw stats just to show a player's win-contribution split. That gave the
- * app two independent implementations of one calculation, and they drifted.
- *
- * Storing them makes the browser a pure view layer: nothing on screen is
- * derived from anything except these fields.
- *
- * Keys must match the `Breakdown` type in the formula module — there is a test
- * asserting exactly that, since a schema silently missing a field would be
- * stripped by Zod on the way to MongoDB.
+ * Keys must match the `Breakdown` type in the formula module — a test asserts
+ * exactly that, since a schema silently missing a field would have it stripped
+ * by Zod on the way to MongoDB.
  */
 export const BreakdownSchema = z.object({
   teamWinRatio: z.number(),
@@ -146,20 +130,14 @@ export type PlayerSummaryFromDatabase = z.infer<
  * One player's season-to-date figures and score on one date — a row of the
  * `PlayerDailyValues` collection.
  *
- * Deliberately NOT built on `FullPlayerSummarySchema`, which is the shape the
- * Basketball Reference scraper produced. That schema carries fields the NBA
- * game logs cannot supply (`gamesStarted`) and omits ones they can
- * (`playerId`, possession totals). Reusing it would have meant inventing a
- * value for the first — and a fabricated zero is indistinguishable from a real
- * one once stored.
+ * Deliberately NOT built on `FullPlayerSummarySchema`, the Basketball Reference
+ * shape: it carries fields the NBA game logs cannot supply (`gamesStarted`) and
+ * omits ones they can (`playerId`, possession totals). A fabricated zero is
+ * indistinguishable from a real one once stored.
  *
- * ── No rank is stored ──────────────────────────────────────────────────────
- *
- * Rank is a property of a date's whole field, not of a player, and it is
- * computed when a date is read. Storing it would mean every row on a date has
- * to be rewritten whenever any one of them changes, and a board that disagrees
- * with itself the moment that half-succeeds. Not storing it is also what makes
- * "top 10 / top 50 / whole league" a query parameter rather than a migration.
+ * **No rank is stored.** It is computed when a date is read, which is what
+ * makes "top 10 / top 50 / whole league" a query parameter rather than a
+ * migration.
  */
 export const DailyValueRowSchema = z.object({
   /** "M-D-YYYY" — the query key the API and front end are built on. */

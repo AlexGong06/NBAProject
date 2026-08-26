@@ -35,7 +35,8 @@ src/
       fetch-season.ts              # 5 calls -> a whole season of game logs
       season-to-date.ts            # rolling aggregation, stint-aware team context
     mvp-calculation/               # scores a list of players, sorts by value
-    scraper/                       # LEGACY Basketball Reference scrapers (unused)
+    scraper/                       # one Basketball Reference game-log parser,
+                                   # used only by fetch-game-logs and migrate
   api/
     index.ts                       # Express server (port 3000, CORS enabled)
     routes/
@@ -136,8 +137,11 @@ scripts/
   date; a null `rank` on a day that *did* have games belongs to the player — he
   had not debuted, or the loaded board never held him. Only the first is carried
   forward. Blur them and a rookie gets a rank before his first game.
-- **`src/services/scraper/`** is retained Basketball Reference code that nothing
-  in the live path calls.
+- **`src/services/scraper/`** holds one surviving Basketball Reference parser,
+  `scrape-player-game-log.ts`. Nothing in the live request path calls it, but
+  `pnpm fetch-game-logs` and `pnpm migrate` both import it and 30 tests cover it
+  — so it is not deletable. The Playwright scrapers that used to sit beside it
+  are gone, and with them the `playwright` dependency.
 
 ## Additional Documentation
 

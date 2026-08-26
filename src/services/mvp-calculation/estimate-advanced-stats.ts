@@ -1,35 +1,19 @@
 // Estimating VORP, Win Shares and Box Plus/Minus for a day that was not scraped.
 //
-// Every other input the formula needs can be reconstructed exactly for any past
-// date from Basketball Reference game logs: games played, the team's record,
-// every per-game box-score rate, true shooting, and usage. These three cannot.
-// They depend on league-wide context — pace, league average efficiency, team
-// ratings — which Basketball Reference computes across all thirty teams and
-// publishes only as a current snapshot. Yesterday's values are gone.
+// Legacy: these three metrics left the formula at version 3. Retained for
+// `pnpm validate-estimates`, which checks the old interpolated rows.
 //
-// So they are interpolated between the two real observations either side of the
-// gap. This is not the same problem as reconstructing a season from its final
-// totals, which is hindsight bias and worst early in the year. Every gap in this
-// dataset is bounded on both sides by a scrape that actually happened, seven of
-// the eight runs are a single day wide, and the interpolation is anchored to a
-// quantity known exactly for every missing day.
+// They depend on league-wide context that Basketball Reference publishes only
+// as a current snapshot, so a past date's values cannot be re-read — they are
+// interpolated between the real observations either side of the gap.
 //
-// ── Why the anchor is games played, not the calendar ────────────────────────
+// **The anchor is games played, not the calendar.** VORP and Win Shares accrue
+// per game appeared in, so interpolating on dates would drift them forward for
+// a player who sat out the whole gap — inventing production during an absence.
+// Anchored on games, a player who did not play has weight zero and holds flat.
 //
-// VORP and Win Shares are cumulative: they accrue per game a player appears in,
-// not per day that passes. Interpolating on dates would drift them forward for
-// a player who sat out the entire gap, inventing production during an absence —
-// which is precisely the error this project spent a formula revision removing.
-//
-// Anchoring on games played gives the right behaviour for free: a player who
-// did not play has a weight of zero and his figures are held flat.
-//
-// Box plus/minus is a rate rather than a total, but it is a season-to-date rate
-// and moves only when a player plays, so it takes the same weight.
-//
-// Anything produced here must be stored with `estimated: true`. A reader cannot
-// tell an interpolated row from a measured one by looking at the numbers, so the
-// data has to say so.
+// Anything produced here is stored with `estimated: true`: an interpolated row
+// is indistinguishable from a measured one by its numbers alone.
 
 /** A real observation either side of a gap. */
 export type AdvancedAnchor = {

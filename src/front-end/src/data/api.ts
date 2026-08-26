@@ -11,15 +11,10 @@
 //
 // The board and the roster are fetched once at startup and indexed in memory,
 // so the component tree stays synchronous. Individual seasons are fetched only
-// when someone opens a profile that the board did not include.
+// when someone opens a profile the board did not include.
 //
-// ── Why the roster is a separate request ───────────────────────────────────
-//
-// The board is a top N per date because the whole collection is 83,054 rows.
-// But only 137 of 582 players ever reach a top 50, so a board-only app can
-// search barely a fifth of the league. The roster endpoint returns one small
-// row per player — enough to find anyone — and the season endpoint fills in the
-// rest on demand.
+// The roster is its own request because only 137 of 582 players ever reach a
+// top 50 — a board-only app could search barely a fifth of the league.
 
 import { buildDataSource } from "./build-source";
 import type { SeriesPoint } from "./build-source";
@@ -35,13 +30,8 @@ function isoToDateKey(iso: string): string {
   return `${Number(m)}-${Number(d)}-${y}`;
 }
 
-/**
- * Players per date to load for the board.
- *
- * Deep enough that the visible leaderboard and its day-to-day movement are all
- * local. Anyone outside it is still findable through the roster and loadable
- * through the season endpoint.
- */
+/** Deep enough that the board and its day-to-day movement are local. Anyone
+ *  outside it is findable through the roster and loadable on demand. */
 const BOARD_DEPTH = 50;
 
 async function getJson<T>(path: string): Promise<T> {
@@ -51,24 +41,18 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 /**
- * Open on four small requests instead of one enormous one.
- *
- * This used to fetch `/daily-mvp-rankings?top=50` — every row of every date,
- * 8,190 rows of 40 fields, **11.47 MB** — before the app rendered anything. It
- * bought instant date-switching at the cost of a two-second stall on arrival,
- * which is the one wait that decides whether a visitor stays.
- *
- * The same information now arrives as:
+ * Open on four small requests instead of one enormous one. Fetching every row
+ * of every date up front was 11.47 MB and a two-second stall on arrival:
  *
  *   calendar    0.4 KB   which dates had games
- *   series     56.5 KB   every player's rank and value on every date, for charts
+ *   series     56.5 KB   every player's rank and value, for charts
  *   one date   14.4 KB   full rows, only for what is on screen
  *   roster     28.3 KB   all 582 players, for search
  *   ─────────────────
- *              99.6 KB   gzipped, against 11.47 MB
+ *              99.6 KB   gzipped
  *
- * Switching dates then costs one 14 KB request at about 170 ms, which is below
- * the threshold anyone notices, and is paid only by people who actually scrub.
+ * Switching dates then costs one 14 KB request (~170 ms), paid only by people
+ * who actually scrub.
  */
 export async function loadApiSource(): Promise<DataSource> {
   const [calendarBody, series, roster] = await Promise.all([

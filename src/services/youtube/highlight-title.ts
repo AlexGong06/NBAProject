@@ -1,25 +1,19 @@
 // Reading an NBA highlight video's title back into a game.
 //
 // There is no shared identifier between YouTube and the NBA's `gameId`, so the
-// join is the title: two teams and a date. That sounds fragile and mostly is
-// not, because the videos this parses come from one curated playlist —
-// "Nightly Full Game Highlights | 2025-26 Season" — where the format barely
-// varies:
+// join is the title: two teams and a date. Workable because the videos come
+// from one curated playlist where the format barely varies:
 //
 //   NUGGETS at WARRIORS | FULL GAME HIGHLIGHTS | October 23, 2025
 //   THUNDER at KINGS | EMIRATES NBA CUP 🏆 | FULL GAME HIGHLIGHTS | November 7, 2025
 //
-// Measured across the whole playlist, this parses 1,218 of the season's 1,230
-// games. The twelve it misses have no reel on the playlist at all, rather than
-// one this fails to read.
+// This parses 1,218 of the season's 1,230 games; the twelve it misses have no
+// reel on the playlist at all.
 //
-// ── The date in the title is the game date ────────────────────────────────
-//
-// Not the upload date — a game played on 13 June appears in a video published
-// on the 14th, and the title says the 13th. Tested explicitly: allowing a ±1
-// day slip when matching found **zero** additional games, so no date fuzzing is
-// needed. That matters, because date fuzzing is how a doubleheader gets matched
-// to the wrong night.
+// **The date in the title is the game date, not the upload date** — a game on
+// the 13th appears in a video published on the 14th. Allowing a ±1 day slip
+// when matching found zero additional games, and date fuzzing is exactly how a
+// doubleheader gets matched to the wrong night.
 
 /** Uppercase nickname as the titles write it → the abbreviation we store. */
 const NICKNAMES: Record<string, string> = {

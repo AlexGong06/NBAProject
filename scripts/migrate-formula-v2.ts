@@ -7,14 +7,9 @@
 // team's games was scored as though he had played every night. Version 2
 // multiplies the whole score by gamesPlayed / teamGamesPlayed.
 //
-// Nothing is re-scraped. Every input the formula needs is already on each row —
-// usage rate, VORP, win shares, box plus/minus, true shooting, the box score,
-// the team record — captured on the day it was collected and irreplaceable
-// today. The one missing field, gamesPlayed, comes from .cache/game-logs.json
-// (build it with `pnpm fetch-game-logs`).
-//
-// Also fills teamLosses, which the scraper read and discarded, and stores every
-// intermediate term of the formula so the front end never has to recompute one.
+// Nothing is re-scraped: every input is already on the row, captured on the day
+// it was collected and irreplaceable today. The one missing field, gamesPlayed,
+// comes from .cache/game-logs.json (`pnpm fetch-game-logs`).
 
 import { MongoClient, type AnyBulkWriteOperation } from "mongodb";
 import dotenv from "dotenv";

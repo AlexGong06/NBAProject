@@ -80,17 +80,11 @@ playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
     // rank the client could derive from what it holds — their chart would
     // simply be empty.
     //
-    // ── Why one aggregation and not 164 counts ────────────────────────────
-    //
-    // This was a `Promise.all` of one `countDocuments` per date. Correct, and
-    // index-only, but 164 round trips: measured at 1.7-2.0s for a season, and
-    // the profile's field mode asks for five players at once, which put five of
-    // those through one connection pool and took 8.1s.
-    //
-    // The rewrite is one pass that counts in the server. Note it groups with
-    // `$sum` and never `$push` — the memory limit that rules out aggregation
-    // elsewhere in this collection is hit by materialising documents, not by
-    // scanning them, so counting stays well inside it.
+    // One aggregation rather than 164 `countDocuments` round trips, which
+    // measured 1.7-2.0s per season and multiplied when several profiles loaded
+    // at once. It groups with `$sum` and never `$push`: the memory limit that
+    // rules out aggregation elsewhere here is hit by materialising documents,
+    // not by scanning them, so counting stays well inside it.
     const threshold: Record<string, number> = {};
     for (const row of results) threshold[row.isoDate] = row.mvpValue;
 

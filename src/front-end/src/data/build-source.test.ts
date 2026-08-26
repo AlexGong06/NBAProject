@@ -592,8 +592,7 @@ describe("a player the board saw on only one date", () => {
       },
     });
 
-    // The field chart asks for several players at once while the profile is
-    // asking for one of them itself.
+    // Concurrent callers must share one request, not race.
     await Promise.all([
       D.loadPlayerSeason("One Good Day"),
       D.loadPlayerSeason("One Good Day"),

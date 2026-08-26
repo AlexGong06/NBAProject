@@ -3,23 +3,16 @@
 //   pnpm build-season            dry run — computes everything, writes nothing
 //   pnpm build-season --apply    writes both collections
 //
-// Five requests give every player-game of the season. From those, for every one
-// of the ~164 game dates, every player who has debuted gets his season-to-date
-// figures and an MVP value. Roughly 87,000 rows, computed in memory, verified,
-// then written.
+// Five requests give every player-game of the season; from those, every player
+// who has debuted gets season-to-date figures and an MVP value on each of the
+// ~164 game dates. Roughly 87,000 rows, computed in memory, verified, written.
 //
-// Two collections:
+//   PlayerGameLogs2526   raw fact, exactly as the API returned it. Keeping it
+//                        makes a formula change a recompute, not a re-fetch.
+//   PlayerDailyValues    one row per player per date: inputs, every term, score.
 //
-//   PlayerGameLogs2526   raw fact — one row per player per game, exactly as the
-//                        API returned it. The event source. Keeping it means a
-//                        formula change is a recompute, not a re-fetch.
-//   PlayerDailyValues    one row per player per date: season-to-date inputs,
-//                        every term of the formula, and the score.
-//
-// No rank is stored. See DailyValueRowSchema for why.
-//
-// Both use deterministic _ids, so re-running is idempotent rather than
-// duplicating the season.
+// No rank is stored — see DailyValueRowSchema. Both use deterministic _ids, so
+// re-running is idempotent rather than duplicating the season.
 
 import { MongoClient, type AnyBulkWriteOperation } from "mongodb";
 import dotenv from "dotenv";

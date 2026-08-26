@@ -146,21 +146,14 @@ const n = (v: number | null | undefined): number =>
  *   "NOP @ MIN"     → away at MIN
  *   "TOR vs. BKN"   → home against BKN
  *
- * The separator is the whole signal: `@` means the team travelled, `vs.` means
- * it hosted. Anything that does not match returns nulls rather than defaulting
- * to a side — a game silently labelled "home" is worse than one labelled
- * nothing, because nobody checks a plausible label.
+ * The separator is the whole signal. Anything that does not match returns nulls
+ * rather than defaulting to a side — a game silently labelled "home" is worse
+ * than one labelled nothing, because nobody checks a plausible label.
  *
- * ── `isHome` is not authoritative ─────────────────────────────────────────
- *
- * On a neutral-site game **both** sides read `@`, because neither team is
- * hosting. Five games in 2025-26 are like this — the NBA Cup semifinals and
- * final in Las Vegas among them — and the opponent still parses correctly while
- * the side does not.
- *
- * `GameSummaries2526` carries the scoreboard's own home/away assignment and a
- * `neutralSite` flag, and that is what anything user-facing should read. This
- * field is the fallback for when no summary exists.
+ * **`isHome` is not authoritative.** On a neutral-site game both sides read `@`
+ * because neither is hosting; five 2025-26 games are like this. Anything
+ * user-facing should read `GameSummaries2526`, which carries the scoreboard's
+ * own assignment and a `neutralSite` flag. This is the fallback.
  */
 export function parseMatchup(
   matchup: string | null | undefined,

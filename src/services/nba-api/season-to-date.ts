@@ -1,43 +1,37 @@
 // Rolling season-to-date aggregation.
 //
-// **Advanced statistics cannot be averaged across games.** Every one of them is
-// a rate — a numerator over a denominator — and averaging two games' rates gives
-// a 12-minute blowout the same weight as a 44-minute overtime game.
-//
-// The correct method recovers the raw volume, sums it, and re-divides:
+// **Advanced statistics cannot be averaged across games.** Every one is a rate,
+// so averaging gives a 12-minute blowout the same weight as a 44-minute
+// overtime game. Recover the volume, sum it, re-divide:
 //
 //     rolling rate = Σ(game rate × game denominator) / Σ(game denominator)
 //
-// Each stat has its own denominator and using the wrong one is a silent error:
+// Each stat has its own denominator, and the wrong one is a silent error:
 //
 //     net / offensive / defensive rating   possessions
 //     usage, PIE                           minutes
 //     true shooting                        FGA + 0.44 × FTA
 //     box score averages                   games played
 //
-// Why this matters more than it sounds: measured across all 26,651 player-games
-// of 2025-26, a single game's PIE ranges from -11.0 to +6.0 and net rating from
-// -400 to +300. Those are real — a two-minute garbage-time appearance where the
-// denominator is almost nothing. Weighted, a season collapses to sane values
-// (season PIE tops out near 0.213). Averaged, one cameo can move a player's
-// season number more than a month of real basketball.
+// Single-game values are extreme — PIE ranges -11.0 to +6.0 and net rating -400
+// to +300 across 2025-26, all garbage-time cameos with collapsed denominators.
+// Weighted they weigh nothing; averaged, one can move a season number more than
+// a month of real basketball.
 
 import type { PlayerGame, TeamGame } from "./fetch-season";
 
 /**
  * Per-game PIE values beyond this are excluded from the season average.
  *
- * PIE is a player's share of the game's total events, so it lives in roughly
- * [-1, 1] — a value of -11 is not a bad night, it is a collapsed denominator.
- * Measured across all 26,638 player-games of 2025-26, exactly 12 rows exceed 2
- * in absolute value and every one is an appearance of under seven minutes
- * (Joan Beringer -11.0 in 4.8 minutes, Chris Boucher +6.0 in 3.0).
+ * PIE is a share of the game's events, so it lives in roughly [-1, 1] — a -11
+ * is a collapsed denominator, not a bad night. Exactly 12 of 26,638 rows exceed
+ * 2, every one an appearance under seven minutes, and minute-weighting alone
+ * does not absorb them: one -11 held a player's season PIE below -0.85 through
+ * thirteen games.
  *
- * Minute-weighting alone does not absorb them: Beringer's single -11 held his
- * season PIE below -0.85 through thirteen games. So these are dropped from the
- * PIE average specifically — not from minutes, not from the box score, and not
- * from the stored game log, which stays exactly as the API returned it. The
- * exclusion is a statement about one derived average, not an edit to the data.
+ * Dropped from the PIE average specifically — not from minutes, not from the
+ * box score, and not from the stored game log, which stays byte-identical to
+ * the API. This is a statement about one derived average, not an edit.
  */
 const PIE_SANITY_LIMIT = 2;
 
@@ -73,36 +67,23 @@ export type SeasonToDate = {
  * the current club's full season can produce an availability above 1.
  *
  * The season is therefore split into consecutive stints, divided at the date a
- * player first appears for a new team, and each club contributes the games it
- * played inside its own stint. Crucially the FIRST stint runs from the start of
- * the season, and the LAST runs to `upto` — the window is not bounded by his
- * own appearances.
+ * player first appears for a new team, each club contributing the games it
+ * played inside its own stint.
  *
- * ── Why the window is not first-appearance to last-appearance ──────────────
+ * **The first stint opens at the season start and the last runs to `upto` —
+ * the window is never bounded by a player's own appearances.** That was the
+ * original rule and it quietly deleted absence: a window drawn around someone's
+ * appearances cannot see the games he missed, because it is defined by them.
+ * Jayson Tatum scored an "availability" of 0.89 on 16 games played, ranking 5th
+ * in a season he almost entirely missed. Anchored to the season it is 16/82.
  *
- * That was the original rule and it quietly deleted absence. A player who tore
- * something in October and returned for the last eighteen games had a window
- * eighteen games wide, so missing 64 games cost him nothing:
+ * One known over-charge: stints divide at the first game for the new club,
+ * because the game logs carry no transaction dates, so games the old club plays
+ * between the trade and that debut are still charged. A handful of games, and
+ * it errs toward penalising — the safe direction for a metric whose failure
+ * mode is flattering someone who did not play.
  *
- *     Jayson Tatum, 2026-04-12    16 games played, "availability" 0.89
- *     ranked 5th in the league on a season he almost entirely missed
- *
- * Anchoring to the season instead gives 16/82 = 0.195, and he places where a
- * 16-game season belongs. The availability term exists precisely to charge for
- * those games; a window drawn around a player's own appearances can never see
- * them, because it is defined by them.
- *
- * ── The one thing this over-charges ────────────────────────────────────────
- *
- * Stints are divided at the player's first game for the new club, because the
- * API's game logs carry no transaction dates. Games his old club plays between
- * the trade and his debut for the new one are therefore still charged to him.
- * That is a handful of games for a traded player, and it errs toward penalising
- * — the safe direction for a metric whose failure mode is flattering someone
- * who did not play.
- *
- * `gamesPlayed ≤ teamGamesPlayed` still holds by construction: every game he
- * played for a club falls inside that club's stint.
+ * `gamesPlayed ≤ teamGamesPlayed` holds by construction.
  */
 export function teamContextAsOf(
   playerGames: PlayerGame[],

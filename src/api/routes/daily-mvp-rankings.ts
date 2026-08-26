@@ -51,40 +51,28 @@ function topParam(raw: unknown): number {
   return Math.min(n, MAX_TOP);
 }
 
-/**
- * Ranks are computed on read, never stored.
- *
- * A rank is a property of a date's entire field, not of a player, so storing it
- * would mean rewriting every row on a date whenever any one of them changed —
- * and a board that contradicts itself the moment that half-succeeds. Sorting by
- * `mvpValue` here is also what lets `?top=` mean anything: the depth of the
- * board is a question the caller asks, not one the database answered months ago.
- */
-
-// GET /daily-mvp-rankings?top=50
-// The top N players for every date, most recent date first.
+// GET /daily-mvp-rankings?top=50 — the top N for every date, newest first.
 //
-// Sorting happens in Mongo on `isoDate`, not on `date`. The "M-D-YYYY" key the
-// app queries by is unsortable as text — "9-1-2025" sorts above "2-17-2026" —
-// so every row carries an ISO twin for exactly this purpose. See date-key.ts.
+// Rank is computed here and never stored: it is a property of a date's whole
+// field, so storing it would mean rewriting every row on a date whenever one
+// changed. Sorting by `mvpValue` on read is also what lets `?top=` mean
+// anything.
+//
+// Sorting happens on `isoDate`, not `date`. The "M-D-YYYY" key the app queries
+// by is unsortable as text — "9-1-2025" sorts above "2-17-2026" — so every row
+// carries an ISO twin. See date-key.ts.
 dailyRankingsRouter.get("/", async (req, res) => {
   const top = topParam(req.query.top);
 
   try {
     const db = await getDb();
-    // One indexed query per date, rather than one aggregation over the season.
+    // One indexed query per date, not one aggregation over the season. Both
+    // aggregation formulations fail with code 292: `$group`/`$push: "$$ROOT"`
+    // materialises all 83,054 wide documents and `$setWindowFields` sorts the
+    // whole collection, and either exceeds Mongo's 100 MB limit.
     //
-    // Both aggregation formulations fail here with code 292,
-    // QueryExceededMemoryLimitNoDiskUseAllowed: $group with $push: "$$ROOT"
-    // materialises all 83,054 documents, and $setWindowFields has to sort the
-    // whole collection to partition it. These rows are wide, and 83,054 of them
-    // exceed Mongo's 100 MB limit either way.
-    //
-    // Each query below is served start-to-finish by the { date: 1, mvpValue: -1 }
-    // index — it walks the first `top` entries of one date and stops. Nothing is
-    // sorted in memory and nothing is held. It costs 164 small round trips
-    // instead of one large one, which is the right trade when the alternative
-    // does not run at all.
+    // Each query here is served start-to-finish by { date: 1, mvpValue: -1 } —
+    // it walks the first `top` entries of one date and stops.
     const dates: string[] = await db.collection(COLLECTION).distinct("isoDate");
     dates.sort().reverse(); // ISO, so lexicographic is chronological
 
@@ -120,20 +108,15 @@ dailyRankingsRouter.get("/", async (req, res) => {
  *
  * `GET /daily-mvp-rankings/:date?around=Gary%20Payton%20II&window=10`
  *
- * The board endpoints above answer "who leads on this date". This answers
- * "where does *he* sit on this date", which is a different question and cannot
- * be served by cutting a top N: 445 of 582 players never reach a top 50 all
- * season, so for most of the league the board's answer is silence — or worse,
- * the one November date they did crack it, read as their current standing.
+ * The board answers "who leads on this date"; this answers "where does *he*
+ * sit", which cutting a top N cannot serve — 445 of 582 players never reach a
+ * top 50 all season.
  *
- * Note the response is an object, not the array the plain `:date` board returns.
- * A rank is meaningless without the size of the field it was measured in, and
- * the neighbours are only interpretable next to the player's own position, so
- * all three travel together.
+ * The response is an object, not an array: a rank is meaningless without the
+ * size of the field it was measured in, so the three travel together.
  *
- * Ranks are competition ranks — "one more than the number of players strictly
- * ahead" — the same definition used by the per-player season endpoint in
- * players.ts, so the two can never disagree about where somebody stands.
+ * Ranks are competition ranks — one more than the number strictly ahead — the
+ * same definition players.ts uses, so the two cannot disagree.
  */
 async function fieldAround(db: any, date: string, player: string, window: number) {
   const col = db.collection(COLLECTION);

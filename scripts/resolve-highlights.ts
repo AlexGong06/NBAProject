@@ -3,28 +3,16 @@
 //   pnpm resolve-highlights            dry run — pages, matches, reports, writes nothing
 //   pnpm resolve-highlights --apply    writes PlayerGameHighlights
 //
-// ── What is stored ─────────────────────────────────────────────────────────
+// Stores a video id, not a video — eleven characters per game. YouTube hosts
+// the footage; the browser talks to it directly on play.
 //
-// A video id, not a video. Eleven characters per game, about 190 KB for the
-// season. YouTube hosts and streams the footage; the app only ever holds the
-// pointer, and the browser talks to YouTube directly when someone presses play.
+// Matching a title to a game is inference, so it happens here rather than at
+// request time: once, inspectable, and fixable by hand (scripts/add-highlight.ts)
+// instead of re-decided on every page view against a quota.
 //
-// ── Why a script and not a lookup at request time ──────────────────────────
-//
-// Matching a title to a game is inference. Doing it inside a request would mean
-// re-deciding on every page view, at latency, against a quota, with no way to
-// correct a bad answer. Doing it once means the answer is inspectable, cheap,
-// and fixable by hand — see scripts/add-highlight.ts.
-//
-// ── The source ─────────────────────────────────────────────────────────────
-//
-// One curated playlist rather than the channel's uploads or a per-game search:
-//
-//   search.list   100 calls/day  →  1,230 games is about two weeks
-//   uploads       ~250 pages     →  through ten months of off-season filler
-//   this playlist 28 pages       →  every item is a full-game reel
-//
-// 28 quota units for the paging, ~25 more for durations, out of 10,000 a day.
+// The source is one curated playlist, not the channel uploads or a per-game
+// search — search.list allows 100 calls/day, which would take two weeks for
+// 1,230 games. This playlist is 28 pages, every item a full-game reel.
 
 import { writeFileSync } from "fs";
 import { join } from "path";

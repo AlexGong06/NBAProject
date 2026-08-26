@@ -10,18 +10,11 @@
 // straight copy. If a number here disagrees with the API, the export is wrong,
 // not the formula.
 //
-// ── What gets exported ─────────────────────────────────────────────────────
+// The whole season, top N per date: the season arc is the product, so depth is
+// traded rather than length — all 582 players × 164 dates would be 40 MB in git.
 //
-// The whole season, top N players per date. The season arc is the product —
-// watching a race turn over 164 days — so truncating to a recent window would
-// throw away the thing worth showing. Depth is what gets traded instead: the
-// database holds all 582 players per date, and 582 × 164 would be a 40 MB file
-// committed to git.
-//
-// No rank is exported, because none is stored. `buildDataSource` sorts by score
-// and numbers the result on read, exactly as it does with the live API.
-//
-// A development tool. Never run by the app.
+// No rank is exported, because none is stored. A development tool, never run by
+// the app.
 
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";

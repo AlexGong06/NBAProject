@@ -6,15 +6,10 @@
 // from the real observations either side, and compares the result to what was
 // really recorded. Read-only — it writes nothing.
 //
-// Two questions, and the second is the one that matters:
-//
-//   1. How far off are VORP, Win Shares and BPM?
-//   2. How often does the reconstructed day produce a different leaderboard?
-//
-// A large error in a stat nobody looks at directly is tolerable; a small error
-// that reorders the top five is not. The second number is what belongs in the
-// README, and what decides whether the eight-day February outage gets filled or
-// left as a gap.
+// The question that matters is not how far off VORP, Win Shares and BPM are,
+// but how often a reconstructed day produces a different leaderboard: a large
+// error in a stat nobody reads directly is tolerable, a small one that reorders
+// the top five is not.
 
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";

@@ -1,23 +1,15 @@
 // Client for the NBA's stats API (the endpoints behind nba.com/stats).
 //
 // Undocumented and header-sensitive. The header set below is lifted from the
-// `nba_api` Python package, which is the de-facto reference for these endpoints,
-// and verified working from a plain fetch — no Python is needed at runtime.
+// `nba_api` Python package and verified from a plain fetch — no Python at runtime.
 //
-// ── The failure mode to know about ──────────────────────────────────────────
-//
-// When this API declines a request it does NOT return 403. It completes the TLS
-// handshake, accepts the request, and then never replies — so a wrong header set
-// is indistinguishable from a network outage. Two headers matter more than they
-// look:
+// **When this API declines a request it does NOT return 403.** It completes the
+// handshake, accepts the request and never replies, so a wrong header set is
+// indistinguishable from a network outage. Three things matter:
 //
 //   Referer must be https://www.nba.com/  — not https://stats.nba.com/
 //   The Sec-Ch-Ua / Sec-Fetch-Dest headers must be present
-//
-// And the `x-nba-stats-origin` / `x-nba-stats-token` headers that circulate in
-// blog posts and Stack Overflow answers are NOT sent by nba_api. Adding them
-// while omitting the Sec-* headers is what produced hours of "the API is
-// blocking us" during design. It was not.
+//   x-nba-stats-origin / x-nba-stats-token, widely cited online, are NOT sent
 //
 // Because a rejection looks like a hang, every request carries a timeout and
 // reports it as a distinct error rather than letting a caller wait forever.

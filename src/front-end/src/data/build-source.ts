@@ -1,15 +1,11 @@
 // Turns a flat list of stored ranking rows into the shape the UI reads.
 //
-// This is the whole of the front end's data layer. Both sources — the bundled
-// fixture and the live API — produce the same array of rows and hand it here,
-// so there is exactly one implementation of grouping, gap detection, ranking
-// and history.
+// The whole of the front end's data layer. Both sources — the bundled fixture
+// and the live API — hand the same array of rows here, so grouping, gap
+// detection, ranking and history each have exactly one implementation.
 //
-// Nothing in this file computes a score. Every number the UI shows was
-// calculated once, by the backend, when the season was built, and stored. That is
-// deliberate: the app used to re-run the MVP formula in the browser to recover
-// intermediate terms the database had thrown away, which gave one calculation
-// two implementations that could disagree — and they did.
+// Nothing here computes a score. Every number the UI shows was calculated once
+// by the backend and stored.
 
 import { TEAMS } from "./teams";
 import type {
@@ -96,10 +92,9 @@ function assertRowsAreComplete(rows: StoredRow[], source: string): void {
 /**
  * Optional capabilities a source can supply beyond the rows themselves.
  *
- * The board is always a top N per date, so most of the league is absent from
- * `rows` — 137 of 582 players reach a top 50 all season. A source that can
- * reach further (the API) passes these in; the offline fixture cannot, and
- * says so by omitting them.
+ * The board is a top N per date, so most of the league is absent from `rows` —
+ * 137 of 582 players reach a top 50 all season. The API passes these in; the
+ * offline fixture says it cannot by omitting them.
  */
 export type SourceExtras = {
   /** Every player in the league, for search. Ordered best first. */
@@ -109,14 +104,9 @@ export type SourceExtras = {
    * player is unknown to the source.
    */
   fetchPlayerSeason?: (playerName: string) => Promise<RankedPlayer[] | null>;
-  /**
-   * Fetch one date's field around a player, ranked against the whole league.
-   *
-   * The board cannot answer this. It is a top N, so it knows where a player
-   * stands only on the dates he was in the top N — and reporting a position
-   * within 50 loaded rows as a league rank is precisely the failure this
-   * replaces.
-   */
+  /** One date's field around a player, ranked against the whole league — which
+   *  a top-N board cannot answer without passing off a position within 50
+   *  loaded rows as a league rank. */
   fetchFieldAround?: (
     playerName: string,
     dateKey: string,
@@ -131,12 +121,9 @@ export type SourceExtras = {
     query: { gameId: string } | { onOrBefore: string },
   ) => Promise<PlayerGame | null>;
   /**
-   * The ISO dates games were played on.
-   *
-   * Supplied, the season's shape no longer has to be inferred from a full set
-   * of rows — which is what made the app download 11.47 MB before rendering.
-   * Omitted, the calendar is derived from `rows` exactly as before, which is
-   * what the offline fixture does.
+   * The ISO dates games were played on. Supplied, the season's shape need not
+   * be inferred from a full set of rows — which is what made the app download
+   * 11.47 MB before rendering. Omitted, it is derived from `rows`.
    */
   calendar?: string[];
   /**
@@ -266,15 +253,11 @@ export function buildDataSource(
   };
 
   /**
-   * The game day whose standings are in effect on `dateKey`.
+   * The game day whose standings are in effect on `dateKey`: itself when games
+   * were played, otherwise the most recent game day before it.
    *
-   * Itself when games were played; otherwise the most recent game day before
-   * it. Nobody played on Feb 15, so the standings on Feb 15 are the standings
-   * from Feb 12 — not an absence, and certainly not an error.
-   *
-   * Every date-scoped read goes through here. The first date in the calendar is
-   * a game day by construction (the calendar is built from the dates that have
-   * rows), so this only returns null for a key outside the season.
+   * Every date-scoped read goes through here. The calendar's first date is a
+   * game day by construction, so this only returns null outside the season.
    */
   const effectiveDate = (dateKey: string): DateInfo | null => {
     const snap = snapshot(dateKey);
@@ -297,13 +280,9 @@ export function buildDataSource(
   };
 
   /**
-   * Rankings as they stood on a date, with movement measured against the
-   * previous game day.
-   *
-   * Strict: a day with no games has no board of its own and returns null. Use
-   * `standingsFor` to ask the question a reader actually asks — "what were the
-   * standings on this date" — which on an off day is answered by the previous
-   * game day rather than by silence.
+   * Rankings as they stood on a date, movement measured against the previous
+   * game day. Strict: an off day returns null. Most callers want
+   * `standingsFor`, which answers off days from the previous game day.
    */
   const rankings = (dateKey: string): RankedPlayer[] | null => {
     const snap = snapshot(dateKey);
@@ -370,12 +349,9 @@ export function buildDataSource(
   };
 
   /**
-   * The standings in effect on a date, off days included.
-   *
-   * `asOf` is the game day the rows come from and `noGames` says whether that
-   * differs from the date asked for, so the caller can show a board *and* say
-   * why it has not moved. The board used to render an error page here, which
-   * described six days of the All-Star break as six days of broken data.
+   * The standings in effect on a date, off days included. `asOf` is the game
+   * day the rows come from and `noGames` says whether that differs from the
+   * date asked for, so a caller can show a board *and* say why it has not moved.
    */
   const standingsFor = (dateKey: string): Standings | null => {
     const asOf = effectiveDate(dateKey);
@@ -388,12 +364,10 @@ export function buildDataSource(
   };
 
   /**
-   * Seasons fetched on demand for players the board never loaded.
-   *
-   * Declared before `history` because `history` consults it. Putting the cache
-   * here — rather than handing fetched points to the profile component — is
-   * what lets the charts, the peak-rank readout and anything added later work
-   * for these players without knowing they were fetched at all.
+   * Seasons fetched on demand for players the board never loaded. Declared
+   * before `history`, which consults it. Caching here rather than handing
+   * points to the profile component is what lets the charts and the peak-rank
+   * readout work for these players without knowing they were fetched.
    */
   const seasonCache = new Map<string, PlayerSeason | null>();
 
@@ -404,30 +378,18 @@ export function buildDataSource(
    */
   const seasonRows = new Map<string, Map<string, RankedPlayer>>();
 
-  /**
-   * In-flight season fetches, so concurrent callers share one request.
-   *
-   * The chart's field mode asks for several players at once and the profile
-   * asks for one of them itself; without this they race and fetch the same
-   * season twice.
-   */
+  /** In-flight season fetches, so concurrent callers share one request rather
+   *  than racing and fetching the same season twice. */
   const inFlight = new Map<string, Promise<PlayerSeason | null>>();
 
   /**
    * Project a player's values onto the season calendar, carrying the last
-   * observed value across days the NBA did not play.
-   *
-   * ── Why carry forward ──────────────────────────────────────────────────
-   *
-   * A player's rank on Feb 15 is his rank from Feb 12, because nobody played in
-   * between. Leaving those days null drew the All-Star break as a six-day hole
-   * with a dashed line across it, captioned "no scrape" — a rendering of broken
-   * data where there is none. Carrying the value forward draws a flat line,
-   * which is what actually happened.
+   * observed value across days the NBA did not play — a rank on Feb 15 is the
+   * rank from Feb 12, because nobody played in between.
    *
    * The two reasons a day can have no value stay distinct: `noGames` belongs to
-   * the date, and a null rank on a *game* day belongs to the player — he had
-   * not debuted, or the loaded board never held him. Only the first is carried.
+   * the date, and a null rank on a *game* day belongs to the player. Only the
+   * first is carried.
    */
   const projectHistory = (
     valueAt: (dateKey: string) => { rank: number; score: number } | null,
@@ -527,18 +489,10 @@ export function buildDataSource(
   /**
    * A player's whole season, ranked against the whole league.
    *
-   * ── Why board membership is not a shortcut ──────────────────────────────
-   *
-   * This used to return early whenever `findPlayer` hit, on the reasoning that
-   * a player already in memory needs no request. But `PLAYERS` holds each
-   * player's latest row *within the loaded board*, and the board is a top N per
-   * date. A player who reached the top 50 once — Gary Payton II did, on a
-   * one-game sample in November — was therefore served that single row as his
-   * season: his November rank shown as his current rank, out of a field of 50
-   * presented as the league, with a chart that had one point in it.
-   *
-   * So the season endpoint wins whenever the source has one. The board is the
-   * fallback, not the shortcut.
+   * Board membership is not a shortcut. `PLAYERS` holds each player's latest
+   * row *within the loaded board*, and the board is a top N per date — so a
+   * player who cracked it once on a one-game November sample would be served
+   * that single row as his entire season. The season endpoint always wins.
    */
   const loadPlayerSeason = async (playerName: string): Promise<PlayerSeason | null> => {
     if (seasonCache.has(playerName)) return seasonCache.get(playerName) ?? null;

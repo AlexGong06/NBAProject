@@ -79,9 +79,3 @@ export function interpolateAdvanced(
   };
 }
 
-/** The fields this module estimates, for stamping provenance onto a row. */
-export const ESTIMATED_FIELDS = [
-  "valueOverReplacement",
-  "winShare",
-  "boxPlusMinus",
-] as const;

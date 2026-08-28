@@ -9,7 +9,7 @@
 // be linked to as it was being read, and that moving between the board and a
 // profile silently changed which day you were looking at.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   BrowserRouter, Route, Routes, useNavigate, useParams, useSearchParams,
 } from "react-router-dom";
@@ -20,6 +20,8 @@ import Nav from "./components/Nav";
 import SearchOverlay from "./components/SearchOverlay";
 import FormulaPanel from "./components/FormulaPanel";
 import RankingsView from "./components/RankingsView";
+import TabBar, { TAB_BAR_HEIGHT } from "./components/TabBar";
+import { useIsMobile } from "./use-media-query";
 import PlayerProfileView from "./components/PlayerProfileView";
 
 const TOP_N = 5;
@@ -49,8 +51,7 @@ function Shell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
-  const [toast, setToast] = useState("");
-  const toastTimer = useRef<number | undefined>(undefined);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     let alive = true;
@@ -112,13 +113,6 @@ function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
-
-  const showToast = useCallback((msg: string) => {
-    window.clearTimeout(toastTimer.current);
-    setToast(msg);
-    toastTimer.current = window.setTimeout(() => setToast(""), 2200);
-  }, []);
 
   // The date rides along, so opening a player from the Nov 16 board lands on
   // Nov 16 rather than silently jumping to the end of the season.
@@ -200,6 +194,10 @@ function Shell() {
     lineHeight: 1.55,
     position: "relative",
     overflow: "hidden",
+    // Clear the fixed tab bar, or it covers the last rows of every page.
+    paddingBottom: isMobile
+      ? `calc(${TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom, 0px))`
+      : undefined,
   };
 
   if (loadError) {
@@ -282,7 +280,6 @@ function Shell() {
           onBack={() => navigate(`/?date=${encodeURIComponent(dateKey)}`)}
           onOpenPlayer={openPlayer}
           onTogglePanel={() => setPanelOpen(true)}
-          onToast={showToast}
         />
       )}
 
@@ -302,25 +299,19 @@ function Shell() {
         <FormulaPanel player={focusPlayer} onClose={() => setPanelOpen(false)} />
       )}
 
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            right: 28,
-            bottom: 28,
-            zIndex: 90,
-            background: C.raised,
-            border: `1px solid ${C.accentDeep}`,
-            borderRadius: 10,
-            padding: "12px 16px",
-            fontSize: 13,
-            color: C.accentPale,
-            boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
+      {isMobile && (
+        <TabBar
+          view={view}
+          panelOpen={panelOpen}
+          onGoRankings={() => navigate(`/?date=${encodeURIComponent(dateKey)}`)}
+          onOpenSearch={() => {
+            setQuery("");
+            setSearchOpen(true);
           }}
-        >
-          {toast}
-        </div>
+          onTogglePanel={() => setPanelOpen((v) => !v)}
+        />
       )}
+
     </div>
   );
 }

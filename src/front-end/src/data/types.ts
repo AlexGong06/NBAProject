@@ -220,19 +220,6 @@ export type Standings = {
   noGames: boolean;
 };
 
-export type Game = {
-  id: string;
-  dateShort: string;
-  weekday: string;
-  opp: string;
-  oppName: string;
-  home: boolean;
-  vs: string;
-  tip: string;
-  arena: string;
-  priceFrom: number;
-};
-
 /**
  * One player in the search index. Search covers the whole league while the
  * board only loads a top N — 137 of 582 players reach a top 50 all season — so
@@ -340,5 +327,4 @@ export type DataSource = {
   ensureDate(dateKey: string): Promise<void>;
   history(playerName: string, dateKey: string, days: number): HistoryPoint[];
   findPlayer(name: string): RankedPlayer | undefined;
-  nextGames(playerName: string): Game[];
 };

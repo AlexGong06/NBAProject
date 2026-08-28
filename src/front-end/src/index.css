@@ -85,3 +85,15 @@ button {
     animation: none;
   }
 }
+
+/* A scroll container with no visible scrollbar. The day strip scrolls by
+   touch and by its own re-centring, so a permanent macOS scrollbar would sit
+   across the bottom of the cards for no purpose. */
+.noscroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.noscroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

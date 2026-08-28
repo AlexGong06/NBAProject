@@ -83,11 +83,8 @@ function num(value: number | null | undefined): number {
   return typeof value === "number" && !Number.isNaN(value) ? value : 0;
 }
 
-/**
- * Combine the three top-level terms into a final score. Exported because the
- * front end's fixture perturbs the two halves and has to recombine them.
- */
-export function combine(
+/** Combine the three top-level terms into a final score. */
+function combine(
   availability: number,
   winContribution: number,
   totalStats: number,

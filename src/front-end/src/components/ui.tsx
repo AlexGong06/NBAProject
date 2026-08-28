@@ -220,9 +220,6 @@ export const ArrowLeft = ({ size = 13, color }: IconProps) =>
 export const CloseIcon = ({ size = 12, color }: IconProps) =>
   svg(size, color, "M205.66 194.34a8 8 0 01-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 01-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0111.32-11.32L128 116.69l66.34-66.35a8 8 0 0111.32 11.32L139.31 128z");
 
-export const WarningIcon = ({ size = 20, color }: IconProps) =>
-  svg(size, color, "M128 24a104 104 0 10104 104A104.11 104.11 0 00128 24zm0 192a88 88 0 1188-88 88.1 88.1 0 01-88 88zm-8-80V80a8 8 0 0116 0v56a8 8 0 01-16 0zm20 36a12 12 0 11-12-12 12 12 0 0112 12z");
-
 export const PlayIcon = ({ size = 14, color }: IconProps) =>
   svg(size, color, "M232.4 114.49L88.32 26.35a16 16 0 00-16.2-.3A15.86 15.86 0 0064 39.87v176.26A15.94 15.94 0 0080 232a16.07 16.07 0 008.36-2.35l144.04-88.14a15.81 15.81 0 000-27.02z");
 

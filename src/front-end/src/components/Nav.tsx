@@ -60,30 +60,34 @@ export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }:
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <HoverButton
-          onClick={onGoRankings}
-          style={{
-            ...tabBase,
-            color: isRankings ? C.text : C.textDim,
-            borderBottom: `2px solid ${isRankings ? C.accent : "transparent"}`,
-          }}
-          hoverStyle={{ color: C.text }}
-        >
-          Rankings
-        </HoverButton>
-        <HoverButton
-          onClick={onOpenSearch}
-          style={{
-            ...tabBase,
-            color: isRankings ? C.textDim : C.text,
-            borderBottom: `2px solid ${isRankings ? "transparent" : C.accent}`,
-          }}
-          hoverStyle={{ color: C.text }}
-        >
-          Players
-        </HoverButton>
-      </div>
+      {/* These two live in the bottom tab bar on a phone. Both at once would be
+          two sets of the same destinations on one screen. */}
+      {!isMobile && (
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <HoverButton
+            onClick={onGoRankings}
+            style={{
+              ...tabBase,
+              color: isRankings ? C.text : C.textDim,
+              borderBottom: `2px solid ${isRankings ? C.accent : "transparent"}`,
+            }}
+            hoverStyle={{ color: C.text }}
+          >
+            Rankings
+          </HoverButton>
+          <HoverButton
+            onClick={onOpenSearch}
+            style={{
+              ...tabBase,
+              color: isRankings ? C.textDim : C.text,
+              borderBottom: `2px solid ${isRankings ? "transparent" : C.accent}`,
+            }}
+            hoverStyle={{ color: C.text }}
+          >
+            Players
+          </HoverButton>
+        </div>
+      )}
 
       <div style={{ flex: 1 }} />
 

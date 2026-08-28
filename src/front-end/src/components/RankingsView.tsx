@@ -4,11 +4,12 @@ import { bumpChart, sparkline } from "../charts";
 import type { DataSource, RankedPlayer } from "../data/types";
 import { headshotUrl } from "../data/headshot";
 import SeasonRibbon from "./SeasonRibbon";
+import MobileDatePicker from "./MobileDatePicker";
 import LastGameChip from "./LastGameChip";
 import { shortDate } from "../data/last-game";
 import { useIsMobile } from "../use-media-query";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Headshot, HoverBox, HoverButton, PlayIcon,
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Headshot, HoverBox, HoverButton,
 } from "./ui";
 
 /**
@@ -141,31 +142,39 @@ export default function RankingsView({
                 `total value = availability × (0.5 win contribution + 0.5 total stats)`}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <HoverButton onClick={prevDay} style={stepBtn} hoverStyle={{ borderColor: C.accentDeep, color: C.text }}>
-              <ChevronLeft />
-            </HoverButton>
-            <HoverButton onClick={nextDay} style={stepBtn} hoverStyle={{ borderColor: C.accentDeep, color: C.text }}>
-              <ChevronRight />
-            </HoverButton>
-            <HoverButton
-              onClick={() => onPickDate(D.TODAY_KEY)}
-              style={{
-                height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
-                border: `1px solid ${C.lineStrong}`, borderRadius: 8,
-                color: C.textDim, fontSize: 13, cursor: "pointer",
-              }}
-              hoverStyle={{ borderColor: C.accentDeep, color: C.text }}
-            >
-              {/* Not "Today". This jumps to the last date in the season, which
-                  is April 12 2026 and has not been today for months. The
-                  profile view already called it this. */}
-              End of season
-            </HoverButton>
-          </div>
+          {/* The mobile picker carries its own stepper and reset, so this
+              cluster would be a second copy of both directly above it. */}
+          {!isMobile && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <HoverButton onClick={prevDay} style={stepBtn} hoverStyle={{ borderColor: C.accentDeep, color: C.text }}>
+                <ChevronLeft />
+              </HoverButton>
+              <HoverButton onClick={nextDay} style={stepBtn} hoverStyle={{ borderColor: C.accentDeep, color: C.text }}>
+                <ChevronRight />
+              </HoverButton>
+              <HoverButton
+                onClick={() => onPickDate(D.TODAY_KEY)}
+                style={{
+                  height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
+                  border: `1px solid ${C.lineStrong}`, borderRadius: 8,
+                  color: C.textDim, fontSize: 13, cursor: "pointer",
+                }}
+                hoverStyle={{ borderColor: C.accentDeep, color: C.text }}
+              >
+                {/* Not "Today". This jumps to the last date in the season, which
+                    is April 12 2026 and has not been today for months. The
+                    profile view already called it this. */}
+                End of season
+              </HoverButton>
+            </div>
+          )}
         </div>
 
-        <SeasonRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+        {isMobile ? (
+          <MobileDatePicker D={D} dateKey={dateKey} onPick={onPickDate} />
+        ) : (
+          <SeasonRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+        )}
 
         {/* ── An off day ───────────────────────────────────────────────
             A note above a real board, not an error page instead of one.
@@ -212,15 +221,21 @@ export default function RankingsView({
         {hero && (() => {
           const d = decorate(hero, maxScore);
           const sp = sparkline(D, hero.player, dateKey, 140, 34);
+          const heroOpen = expanded === hero.player;
           return (
             <div
               style={{
                 border: `1px solid ${C.lineStrong}`, borderRadius: 14,
+                overflow: "hidden",
+                boxShadow: "0 16px 40px rgba(0,0,0,0.45)", marginBottom: 20,
+              }}
+            >
+            <div
+              style={{
                 background: "linear-gradient(160deg, #262838 0%, #1c1e2b 62%)",
                 padding: isMobile ? 18 : 28, display: "grid",
                 gridTemplateColumns: isMobile ? "62px minmax(0, 1fr)" : "104px minmax(0, 1fr) 200px",
                 gap: isMobile ? 14 : 28, alignItems: isMobile ? "start" : "center",
-                boxShadow: "0 16px 40px rgba(0,0,0,0.45)", marginBottom: 20,
               }}
             >
               <HoverBox
@@ -301,8 +316,31 @@ export default function RankingsView({
                     : { textAlign: "right" }
                 }
               >
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textFaint }}>
-                  MVP value
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    justifyContent: isMobile ? "flex-start" : "flex-end",
+                  }}
+                >
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.textFaint }}>
+                    MVP value
+                  </div>
+                  {/* Rank 1 opens the same drawer as every other row. Without
+                      it, the one player the board exists to name was the only
+                      one you could not expand. */}
+                  <HoverButton
+                    onClick={() => setExpanded(heroOpen ? null : hero.player)}
+                    title={heroOpen ? "Collapse" : "Season averages"}
+                    style={{
+                      width: 30, height: 30, display: "grid", placeItems: "center",
+                      background: "transparent", border: `1px solid ${C.lineStrong}`,
+                      borderRadius: 8, color: C.textDim, cursor: "pointer",
+                      marginLeft: isMobile ? "auto" : 0,
+                    }}
+                    hoverStyle={{ borderColor: C.accentDeep, color: C.text }}
+                  >
+                    {heroOpen ? <ChevronUp /> : <ChevronDown />}
+                  </HoverButton>
                 </div>
                 <div style={{ fontSize: 46, fontWeight: 500, letterSpacing: "-0.03em", lineHeight: 1.05, ...tabular, marginTop: 4 }}>
                   {fmt(hero.mvpValue)}
@@ -316,6 +354,17 @@ export default function RankingsView({
                   <div style={{ fontSize: 10, color: C.textGhost, marginTop: 4 }}>Rank, 14 days</div>
                 </div>
               </div>
+            </div>
+
+            {heroOpen && (
+              <RowDrawer
+                p={hero}
+                isMobile={isMobile}
+                indent={false}
+                onOpenPlayer={onOpenPlayer}
+                onTogglePanel={onTogglePanel}
+              />
+            )}
             </div>
           );
         })()}
@@ -367,8 +416,8 @@ export default function RankingsView({
                   <Headshot
                     src={headshotUrl(p)}
                     initials={initials(p.player)}
-                    size={52}
-                    fontSize={14}
+                    size={isMobile ? 40 : 52}
+                    fontSize={isMobile ? 12 : 14}
                   />
                   {hover === p.player && (
                     <div
@@ -446,85 +495,13 @@ export default function RankingsView({
               </div>
 
               {isOpen && (
-                <div
-                  style={{
-                    borderTop: `1px solid ${C.line}`, background: C.surfaceSunk,
-                    padding: isMobile ? "16px 12px" : "20px 18px 18px 108px",
-                  }}
-                >
-                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 3 : 6}, 1fr)`, gap: "18px 12px" }}>
-                    {statList(p).map((s) => (
-                      <div key={s.label}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost }}>
-                          {s.label}
-                        </div>
-                        <div style={{ fontSize: 17, fontWeight: 500, ...tabular, marginTop: 3 }}>{s.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 20 }}>
-                    {/* First position, because it is the reason to open a row.
-                        The label changes when no reel resolved: offering to
-                        "watch" something that cannot play is a promise the app
-                        already knows it will break. */}
-                    {p.lastGame && (
-                      <>
-                        <HoverButton
-                          onClick={() => onOpenGame(p.player, p.lastGame!.gameId)}
-                          style={{
-                            height: 36, padding: "0 14px", borderRadius: 8,
-                            display: "inline-flex", alignItems: "center", gap: 9,
-                            background: p.lastGame.hasHighlight ? "rgba(145,132,217,0.10)" : "transparent",
-                            border: `1px solid ${p.lastGame.hasHighlight ? C.accent : C.lineStrong}`,
-                            color: p.lastGame.hasHighlight ? C.accentPale : C.textDim,
-                            fontSize: 13, cursor: "pointer",
-                          }}
-                          hoverStyle={
-                            p.lastGame.hasHighlight
-                              ? { background: "rgba(145,132,217,0.20)" }
-                              : { color: C.text, borderColor: C.accentDeep }
-                          }
-                        >
-                          <PlayIcon />
-                          {p.lastGame.hasHighlight
-                            ? `Watch the game played on ${shortDate(p.lastGame.date)}`
-                            : `Box score for ${shortDate(p.lastGame.date)}`}
-                        </HoverButton>
-                        {/* His line in that game. These sit under a button
-                            naming a date, so they can only be read as the box
-                            score for it — season averages here would be wrong
-                            by a margin nobody would catch. */}
-                        <span style={{ fontSize: 12, color: C.textFaint }}>
-                          {`${p.lastGame.points} pts · ${p.lastGame.rebounds} reb · ` +
-                            `${p.lastGame.assists} ast${p.lastGame.hasHighlight ? "" : " · no reel found"}`}
-                        </span>
-                        <span style={{ flex: 1 }} />
-                      </>
-                    )}
-                    <HoverButton
-                      onClick={() => onOpenPlayer(p.player)}
-                      style={{
-                        height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
-                        border: `1px solid ${C.accentDeep}`, borderRadius: 8,
-                        color: C.accentPale, fontSize: 13, cursor: "pointer",
-                      }}
-                      hoverStyle={{ background: C.accentWash, borderColor: C.accent }}
-                    >
-                      View profile →
-                    </HoverButton>
-                    <HoverButton
-                      onClick={onTogglePanel}
-                      style={{
-                        height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
-                        border: `1px solid ${C.lineStrong}`, borderRadius: 8,
-                        color: C.textDim, fontSize: 13, cursor: "pointer",
-                      }}
-                      hoverStyle={{ color: C.text, borderColor: C.accentDeep }}
-                    >
-                      How this score is built
-                    </HoverButton>
-                  </div>
-                </div>
+                <RowDrawer
+                  p={p}
+                  isMobile={isMobile}
+                  indent={!isMobile}
+                  onOpenPlayer={onOpenPlayer}
+                  onTogglePanel={onTogglePanel}
+                />
               )}
             </div>
           );
@@ -626,6 +603,84 @@ export default function RankingsView({
             there is no collector, nothing runs on a schedule, and the gaps are
             days the NBA did not play. Deleted rather than rewritten — the rail
             does not need something in the slot. */}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The panel behind a row's chevron — the same one for rank 1 and for the rest.
+ *
+ * Shared rather than duplicated: the hero renders through a different path
+ * above, and two copies of this would drift the moment either changed.
+ */
+function RowDrawer({
+  p, isMobile, indent, onOpenPlayer, onTogglePanel,
+}: {
+  p: RankedPlayer;
+  isMobile: boolean;
+  indent: boolean;
+  onOpenPlayer: (name: string) => void;
+  onTogglePanel: () => void;
+}) {
+  return (
+    <div
+      style={{
+        borderTop: `1px solid ${C.line}`, background: C.surfaceSunk,
+        padding: isMobile ? "16px 12px" : indent ? "20px 18px 18px 108px" : "20px 28px 18px",
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${isMobile ? 3 : 6}, 1fr)`, gap: "18px 12px" }}>
+        {statList(p).map((s) => (
+          <div key={s.label}>
+            <div style={{ fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 500, ...tabular, marginTop: 3 }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 10, marginTop: 20,
+          flexWrap: isMobile ? "wrap" : "nowrap",
+        }}
+      >
+        {/* The chip above already shows this game and opens it, so there is no
+            button here — but the line has to carry its own date. Unlabelled,
+            these numbers read as season averages, which is wrong by a margin
+            nobody would catch. */}
+        {p.lastGame && (
+          <>
+            <span style={{ fontSize: 12, color: C.textFaint }}>
+              {`${shortDate(p.lastGame.date)}: ${p.lastGame.points} pts · ` +
+                `${p.lastGame.rebounds} reb · ${p.lastGame.assists} ast`}
+            </span>
+            <span style={{ flex: 1 }} />
+          </>
+        )}
+        <HoverButton
+          onClick={() => onOpenPlayer(p.player)}
+          style={{
+            height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
+            border: `1px solid ${C.accentDeep}`, borderRadius: 8,
+            color: C.accentPale, fontSize: 13, cursor: "pointer",
+          }}
+          hoverStyle={{ background: C.accentWash, borderColor: C.accent }}
+        >
+          View profile →
+        </HoverButton>
+        <HoverButton
+          onClick={onTogglePanel}
+          style={{
+            height: 34, padding: "0 14px", background: "transparent", whiteSpace: "nowrap",
+            border: `1px solid ${C.lineStrong}`, borderRadius: 8,
+            color: C.textDim, fontSize: 13, cursor: "pointer",
+          }}
+          hoverStyle={{ color: C.text, borderColor: C.accentDeep }}
+        >
+          How this score is built
+        </HoverButton>
       </div>
     </div>
   );

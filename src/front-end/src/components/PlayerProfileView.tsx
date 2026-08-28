@@ -7,9 +7,10 @@ import { headshotUrl } from "../data/headshot";
 import { useIsMobile } from "../use-media-query";
 import { shortDate } from "../data/last-game";
 import SeasonRibbon from "./SeasonRibbon";
+import MobileDatePicker from "./MobileDatePicker";
 import GameView from "./GameView";
 import {
-  ArrowLeft, ChartLineIcon, ChevronLeft, ChevronRight, ExternalIcon, Headshot,
+  ArrowLeft, ChartLineIcon, ChevronLeft, ChevronRight, Headshot,
   HoverButton, PlayIcon,
 } from "./ui";
 
@@ -27,7 +28,6 @@ type Props = {
   onBack: () => void;
   onOpenPlayer: (name: string) => void;
   onTogglePanel: () => void;
-  onToast: (msg: string) => void;
 };
 
 const MODES: { id: ChartMode; label: string }[] = [
@@ -42,7 +42,7 @@ const FIELD_WINDOW = 10;
 
 export default function PlayerProfileView({
   D, playerName, dateKey, onPickDate, panel, gameId, onPickPanel, onPickGame,
-  onBack, onOpenPlayer, onTogglePanel, onToast,
+  onBack, onOpenPlayer, onTogglePanel,
 }: Props) {
   const [mode, setMode] = useState<ChartMode>("rank");
   const [range, setRange] = useState(14);
@@ -190,7 +190,6 @@ export default function PlayerProfileView({
 
   const chartSize = isMobile ? CHART_SIZE.mobile : CHART_SIZE.desktop;
   const chart = mainChart(D, p.player, dateKey, range, mode, chartSize);
-  const games = D.nextGames(p.player);
 
   const wcPct = b ? ((b.winContribution / totalHalf) * 100).toFixed(1) : "0";
   const tsPct = b ? ((b.totalStats / totalHalf) * 100).toFixed(1) : "0";
@@ -245,8 +244,8 @@ export default function PlayerProfileView({
           <Headshot
             src={headshotUrl(p)}
             initials={initials(p.player)}
-            size={132}
-            fontSize={34}
+            size={isMobile ? 76 : 132}
+            fontSize={isMobile ? 20 : 34}
           />
         </div>
 
@@ -318,7 +317,14 @@ export default function PlayerProfileView({
           The profile is a function of a date, so the date is a control, not a
           caption. Same ribbon as the rankings view — one way to move through
           the season, in both places. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 0 4px" }}>
+      {/* The mobile picker carries the date, the stepper, the off-day note and
+          the reset, so this row would be a second copy of all four. */}
+      <div
+        style={{
+          display: isMobile ? "none" : "flex",
+          alignItems: "center", gap: 14, padding: "20px 0 4px",
+        }}
+      >
         <div style={{ display: "flex", border: `1px solid ${C.lineStrong}`, borderRadius: 8, overflow: "hidden" }}>
           <HoverButton
             onClick={() => stepDate(-1)}
@@ -370,7 +376,11 @@ export default function PlayerProfileView({
         </HoverButton>
       </div>
 
-      <SeasonRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+      {isMobile ? (
+        <MobileDatePicker D={D} dateKey={dateKey} onPick={onPickDate} />
+      ) : (
+        <SeasonRibbon D={D} dateKey={dateKey} onPick={onPickDate} />
+      )}
 
       {/* ── Panels ───────────────────────────────────────────────────────
           Tabs rather than a separate route: both panels are readings of one
@@ -532,83 +542,6 @@ export default function PlayerProfileView({
           </div>
           )}
 
-          {/* ── Schedule (fixture mode only; no API endpoint yet) ───── */}
-          {games.length > 0 && (
-            <div style={{ marginTop: 32 }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
-                <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: "-0.015em" }}>Next 10 games</div>
-                <div style={{ fontSize: 12, color: C.textFaint }}>Tickets via partner marketplaces</div>
-              </div>
-              {/* Six columns will not fit a phone and none of them is
-                  droppable, so the table scrolls sideways inside its own box
-                  rather than forcing the page to. */}
-              <div
-                style={{
-                  border: `1px solid ${C.line}`, borderRadius: 12,
-                  overflowX: isMobile ? "auto" : "hidden", overflowY: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid", gridTemplateColumns: "96px 44px minmax(0, 1fr) 96px 104px 116px",
-                    minWidth: isMobile ? 560 : undefined,
-                    gap: 14, alignItems: "center", padding: "10px 18px",
-                    background: C.surfaceSunk, borderBottom: `1px solid ${C.line}`,
-                    fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", color: C.textGhost,
-                  }}
-                >
-                  <div>Date</div><div /><div>Opponent</div><div>Tip</div><div>From</div><div />
-                </div>
-                {games.map((g) => (
-                  <div
-                    key={g.id}
-                    style={{
-                      display: "grid", gridTemplateColumns: "96px 44px minmax(0, 1fr) 96px 104px 116px",
-                    minWidth: isMobile ? 560 : undefined,
-                      gap: 14, alignItems: "center", padding: "12px 18px",
-                      background: C.surface, borderBottom: `1px solid ${C.raised}`,
-                    }}
-                  >
-                    <div style={{ fontSize: 13, color: C.textMuted, ...tabular }}>
-                      {g.weekday} {g.dateShort}
-                    </div>
-                    <div
-                      style={{
-                        width: 34, height: 34, borderRadius: 8, background: C.raised,
-                        border: `1px solid ${C.lineStrong}`, display: "grid", placeItems: "center",
-                        fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", color: C.textDim,
-                      }}
-                    >
-                      {g.opp}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {(g.home ? "vs " : "at ") + g.oppName}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.textFaint }}>
-                        {g.home ? "Home" : `Away · ${g.oppName.split(" ").slice(0, -1).join(" ")}`}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 13, color: C.textDim, ...tabular }}>{g.tip}</div>
-                    <div style={{ fontSize: 14, ...tabular }}>${g.priceFrom}</div>
-                    <HoverButton
-                      onClick={() => onToast(`Opening tickets for ${p.team} ${g.vs} ${g.opp} — ${g.dateShort}`)}
-                      style={{
-                        height: 30, padding: "0 12px", background: "transparent",
-                        border: `1px solid ${C.accentDeep}`, borderRadius: 8,
-                        color: C.accentPale, fontSize: 12, cursor: "pointer",
-                        display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center",
-                      }}
-                      hoverStyle={{ background: C.accentWash, borderColor: C.accent }}
-                    >
-                      Tickets
-                      <ExternalIcon />
-                    </HoverButton>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ── Profile rail ────────────────────────────────────────────── */}

@@ -9,7 +9,7 @@
 
 import { TEAMS } from "./teams";
 import type {
-  DataSource, DateInfo, FieldWindow, Game, HistoryPoint, PlayerSeason,
+  DataSource, DateInfo, FieldWindow, HistoryPoint, PlayerSeason,
   PlayerGame, RankedPlayer, RosterEntry, Snapshot, Standings, StoredRow,
 } from "./types";
 
@@ -459,10 +459,6 @@ export function buildDataSource(
   }
   const PLAYERS = [...latest.values()].sort((a, b) => b.mvpValue - a.mvpValue);
 
-  // There is no schedule endpoint and no schedule in the stored rows, so the
-  // upcoming-games section stays empty rather than being invented.
-  const nextGames = (): Game[] => [];
-
   const findPlayer = (name: string) => PLAYERS.find((p) => p.player === name);
 
   // ── Search index ─────────────────────────────────────────────────────────
@@ -678,6 +674,5 @@ export function buildDataSource(
     rowFor,
     loadLastGame,
     loadGame,
-    nextGames,
   };
 }

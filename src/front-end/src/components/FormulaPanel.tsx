@@ -4,6 +4,7 @@
 import { C, MONO, fmt, label } from "../theme";
 import type { RankedPlayer } from "../data/types";
 import { CloseIcon, HoverButton } from "./ui";
+import { useIsMobile } from "../use-media-query";
 
 type Props = {
   player: RankedPlayer;
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export default function FormulaPanel({ player, onClose }: Props) {
+  const isMobile = useIsMobile();
   // Every term shown here was computed by the backend and stored on the row.
   // The panel explains the number beside it because it IS that number, rather
   // than a second calculation that happens to agree.
@@ -69,15 +71,42 @@ export default function FormulaPanel({ player, onClose }: Props) {
     <>
       <div
         onClick={onClose}
-        style={{ position: "absolute", inset: 0, background: "rgba(12,13,22,0.6)", zIndex: 70 }}
+        style={
+          isMobile
+            ? { position: "fixed", inset: 0, background: "rgba(12,13,22,0.66)", zIndex: 70 }
+            : { position: "absolute", inset: 0, background: "rgba(12,13,22,0.6)", zIndex: 70 }
+        }
       />
+      {/* A 460px side panel anchored right hangs 70px off the left of a phone.
+          On mobile it becomes a bottom sheet instead — fixed, so it stays put
+          however far the board behind it has been scrolled. */}
       <div
-        style={{
-          position: "absolute", top: 0, right: 0, bottom: 0, width: 460,
-          background: C.surfaceAlt, borderLeft: `1px solid ${C.lineStrong}`,
-          zIndex: 80, overflow: "auto", padding: 28,
-        }}
+        style={
+          isMobile
+            ? {
+                position: "fixed", left: 0, right: 0, bottom: 0,
+                maxHeight: "82vh",
+                background: C.surfaceAlt,
+                borderTop: `1px solid ${C.lineStrong}`,
+                borderRadius: "20px 20px 0 0",
+                zIndex: 80, overflow: "auto",
+                padding: "10px 20px 30px",
+              }
+            : {
+                position: "absolute", top: 0, right: 0, bottom: 0, width: 460,
+                background: C.surfaceAlt, borderLeft: `1px solid ${C.lineStrong}`,
+                zIndex: 80, overflow: "auto", padding: 28,
+              }
+        }
       >
+        {isMobile && (
+          <div
+            style={{
+              width: 38, height: 4, borderRadius: 2,
+              background: C.lineStrong, margin: "0 auto 16px",
+            }}
+          />
+        )}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 22 }}>
           <div>
             <div style={{ ...label, color: C.accent, marginBottom: 8 }}>How it works</div>

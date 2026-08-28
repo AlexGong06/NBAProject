@@ -3,6 +3,7 @@ import { C, fmt, initials } from "../theme";
 import type { DataSource } from "../data/types";
 import { headshotUrl } from "../data/headshot";
 import { Headshot, HoverButton, SearchIcon } from "./ui";
+import { useIsMobile } from "../use-media-query";
 
 type Props = {
   D: DataSource;
@@ -13,6 +14,7 @@ type Props = {
 };
 
 export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer }: Props) {
+  const isMobile = useIsMobile();
   // Search covers ROSTER — the whole league — not the loaded board.
   //
   // This used to filter `rankings(TODAY_KEY)`, which is a single date's top N,
@@ -47,73 +49,119 @@ export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer
   return (
     <div
       onClick={onClose}
-      style={{
-        position: "absolute", inset: 0,
-        background: "rgba(12,13,22,0.74)", backdropFilter: "blur(3px)",
-        zIndex: 60, display: "flex", justifyContent: "center", paddingTop: 120,
-      }}
+      // A phone gets a full-screen sheet rather than a floating dialog: a
+      // 620px modal does not fit, and there is no room around it for a scrim
+      // to be worth dimming.
+      style={
+        isMobile
+          ? { position: "fixed", inset: 0, background: C.bg, zIndex: 60, display: "flex" }
+          : {
+              position: "absolute", inset: 0,
+              background: "rgba(12,13,22,0.74)", backdropFilter: "blur(3px)",
+              zIndex: 60, display: "flex", justifyContent: "center", paddingTop: 120,
+            }
+      }
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 620, maxHeight: 560, background: "#1e2030",
-          border: `1px solid ${C.textGhost}`, borderRadius: 14,
-          boxShadow: "0 24px 64px rgba(0,0,0,0.7)", overflow: "hidden",
-          display: "flex", flexDirection: "column",
-        }}
+        style={
+          isMobile
+            ? {
+                width: "100%", height: "100%", background: C.bg,
+                display: "flex", flexDirection: "column", overflow: "hidden",
+              }
+            : {
+                width: 620, maxHeight: 560, background: "#1e2030",
+                border: `1px solid ${C.textGhost}`, borderRadius: 14,
+                boxShadow: "0 24px 64px rgba(0,0,0,0.7)", overflow: "hidden",
+                display: "flex", flexDirection: "column",
+              }
+        }
       >
         <div
-          style={{
-            display: "flex", alignItems: "center", gap: 12,
-            padding: "16px 18px", borderBottom: `1px solid ${C.line}`,
-          }}
+          style={
+            isMobile
+              ? { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 12px" }
+              : {
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "16px 18px", borderBottom: `1px solid ${C.line}`,
+                }
+          }
         >
-          <SearchIcon size={16} color={C.textFaint} />
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search a player, team or abbreviation"
-            style={{
-              flex: 1, background: "transparent", border: 0, outline: "none",
-              color: C.text, fontSize: 16, fontFamily: "inherit",
-            }}
-          />
+          <div
+            style={
+              isMobile
+                ? {
+                    flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10,
+                    height: 44, padding: "0 14px", borderRadius: 12,
+                    background: C.surfaceAlt, border: `1px solid ${C.line}`,
+                  }
+                : { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12 }
+            }
+          >
+            <SearchIcon size={16} color={C.textFaint} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder={isMobile ? "Player, team or abbreviation" : "Search a player, team or abbreviation"}
+              style={{
+                flex: 1, minWidth: 0, background: "transparent", border: 0, outline: "none",
+                color: C.text, fontSize: isMobile ? 15 : 16, fontFamily: "inherit",
+              }}
+            />
+          </div>
+          {/* "ESC" names a key a phone does not have. */}
           <HoverButton
             onClick={onClose}
-            style={{
-              fontSize: 10, letterSpacing: "0.06em", padding: "3px 7px",
-              border: `1px solid ${C.lineStrong}`, borderRadius: 4,
-              color: C.textFaint, background: "transparent", cursor: "pointer",
-            }}
+            style={
+              isMobile
+                ? {
+                    height: 44, padding: "0 6px", fontSize: 14, flex: "none",
+                    background: "transparent", border: 0, color: C.textDim, cursor: "pointer",
+                  }
+                : {
+                    fontSize: 10, letterSpacing: "0.06em", padding: "3px 7px",
+                    border: `1px solid ${C.lineStrong}`, borderRadius: 4,
+                    color: C.textFaint, background: "transparent", cursor: "pointer",
+                  }
+            }
             hoverStyle={{ color: C.text }}
           >
-            ESC
+            {isMobile ? "Cancel" : "ESC"}
           </HoverButton>
         </div>
 
-        <div style={{ overflow: "auto", padding: 8 }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: isMobile ? "0 12px 8px" : 8 }}>
           {results.map((r) => (
             <HoverButton
               key={r.id}
               onClick={() => onOpenPlayer(r.player)}
               style={{
                 width: "100%", display: "grid",
-                gridTemplateColumns: "40px 26px minmax(0, 1fr) auto",
-                gap: 14, alignItems: "center", textAlign: "left",
-                background: "transparent", border: 0, borderRadius: 8,
-                padding: "10px 12px", cursor: "pointer",
+                gridTemplateColumns: isMobile
+                  ? "42px 26px minmax(0, 1fr) auto"
+                  : "40px 26px minmax(0, 1fr) auto",
+                gap: isMobile ? 12 : 14, alignItems: "center", textAlign: "left",
+                background: "transparent", border: 0, borderRadius: isMobile ? 10 : 8,
+                padding: isMobile ? "10px 8px" : "10px 12px", cursor: "pointer",
               }}
               hoverStyle={{ background: C.raisedAlt }}
             >
               <span
                 style={{
-                  position: "relative", width: 36, height: 36, borderRadius: 999,
+                  position: "relative", width: isMobile ? 42 : 36, height: isMobile ? 42 : 36,
+                  borderRadius: 999,
                   background: C.raised, border: `1px solid ${C.lineStrong}`,
                   display: "block", overflow: "hidden",
                 }}
               >
-                <Headshot src={r.headshot} initials={r.initials} size={36} fontSize={11} />
+                <Headshot
+                  src={r.headshot}
+                  initials={r.initials}
+                  size={isMobile ? 42 : 36}
+                  fontSize={isMobile ? 12 : 11}
+                />
               </span>
               <span style={{ fontSize: 12, color: C.textGhost, fontVariantNumeric: "tabular-nums" }}>
                 {r.rank}
@@ -135,14 +183,21 @@ export default function SearchOverlay({ D, query, onQuery, onClose, onOpenPlayer
           )}
         </div>
 
+        {/* The arrow and return hints name keys a phone does not have, so it
+            keeps only the count. */}
         <div
           style={{
-            padding: "10px 18px", borderTop: `1px solid ${C.line}`,
+            padding: isMobile ? "10px 16px" : "10px 18px",
+            borderTop: `1px solid ${C.line}`,
             fontSize: 11, color: C.textGhost, display: "flex", gap: 18,
           }}
         >
-          <span>↑↓ to move</span>
-          <span>↵ to open profile</span>
+          {!isMobile && (
+            <>
+              <span>↑↓ to move</span>
+              <span>↵ to open profile</span>
+            </>
+          )}
           <span>{results.length} tracked</span>
         </div>
       </div>

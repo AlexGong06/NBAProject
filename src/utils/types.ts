@@ -105,7 +105,6 @@ export const PlayerMvpSummarySchema = z.object({
   turnoversPerGame: z.number(),
 });
 
-export type PlayerMvpSummary = z.infer<typeof PlayerMvpSummarySchema>;
 
 export const PpgPlayerSummarySchema = z.object({
   player: z.string(),
@@ -115,16 +114,12 @@ export const PpgPlayerSummarySchema = z.object({
 
 export const PpgPlayerSummaryArraySchema = z.array(PpgPlayerSummarySchema);
 
-export type PpgPlayerSummary = z.infer<typeof PpgPlayerSummarySchema>;
 
 export const PlayerSummaryFromDatabaseSchema =
   PlayerWithCalculatedMvpValueSchema.extend({
     date: z.string(),
   });
 
-export type PlayerSummaryFromDatabase = z.infer<
-  typeof PlayerSummaryFromDatabaseSchema
->;
 
 /**
  * One player's season-to-date figures and score on one date — a row of the

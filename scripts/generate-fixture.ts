@@ -10,7 +10,7 @@
 // straight copy. If a number here disagrees with the API, the export is wrong,
 // not the formula.
 //
-// The whole season, top N per date: the season arc is the product, so depth is
+// One season, top N per date: the season arc is the product, so depth is
 // traded rather than length — all 582 players × 164 dates would be 40 MB in git.
 //
 // No rank is exported, because none is stored. A development tool, never run by
@@ -21,10 +21,22 @@ import dotenv from "dotenv";
 import { writeFileSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
 import logger from "../src/utils/logger";
+import { CURRENT_SEASON } from "../src/utils/season";
 
 dotenv.config();
 
 const COLLECTION = "PlayerDailyValues";
+
+/**
+ * Which season to export. `NBA_SEASON_LABEL` overrides; unset means the newest.
+ *
+ * `PlayerDailyValues` holds every season, so this filter is not optional. A
+ * query without it returns the top N per date across ALL of them — 184 dates
+ * spanning two seasons glued end to end — and the front end would draw one
+ * continuous arc from October 2025 to November 2026 with the whole offseason
+ * rendered as days nobody played. Every row would be individually correct.
+ */
+const SEASON = CURRENT_SEASON;
 const TOP_PER_DATE = 25;
 const PUBLIC_DIR = join(__dirname, "..", "src", "front-end", "public");
 const OUT = join(PUBLIC_DIR, "rankings.json");
@@ -57,9 +69,12 @@ async function main() {
   const col = client.db("NbaDb").collection(COLLECTION);
 
   try {
-    const dates: string[] = await col.distinct("isoDate");
+    const dates: string[] = await col.distinct("isoDate", { season: SEASON });
     if (dates.length === 0) {
-      throw new Error(`${COLLECTION} is empty. Run \`pnpm build-season --apply\` first.`);
+      throw new Error(
+        `${COLLECTION} holds no rows for ${SEASON}. Run ` +
+          `\`NBA_SEASON_LABEL=${SEASON} pnpm build-season --apply\` first.`,
+      );
     }
     dates.sort(); // ISO, so lexicographic is chronological
 
@@ -69,7 +84,7 @@ async function main() {
     const perDate = await Promise.all(
       dates.map((isoDate) =>
         col
-          .find({ isoDate }, { projection: PROJECTION })
+          .find({ season: SEASON, isoDate }, { projection: PROJECTION })
           .sort({ mvpValue: -1 })
           .limit(TOP_PER_DATE)
           .toArray(),

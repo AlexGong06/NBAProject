@@ -8,6 +8,11 @@
 // are a function of a date, and holding it in memory meant a profile could not
 // be linked to as it was being read, and that moving between the board and a
 // profile silently changed which day you were looking at.
+//
+// `?season=` works the same way and for the same reason, with one difference:
+// a date is a selection within loaded data, while a season IS the data.
+// Changing it reloads the whole source, because the calendar, the board, the
+// ranks, the charts and the roster are every one of them scoped to a season.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -35,6 +40,35 @@ function Shell() {
 
   const [D, setD] = useState<DataSource | null>(null);
 
+  // Absent on first load, so the API picks — the newest season that actually
+  // has data, which the bundle cannot know. After that the picker sets it.
+  const seasonParam = searchParams.get("season");
+
+  /**
+   * The outcome of the most recent load, and which season it was for.
+   *
+   * Written only inside promise callbacks, never in an effect body. Both
+   * "are we loading" and "did it fail" are then DERIVED by comparing `season`
+   * against what the URL currently asks for, which has two consequences worth
+   * the indirection:
+   *
+   * - A stale error cannot outlive the season it belongs to. Clearing it used
+   *   to be a second `setState` at the top of the effect.
+   * - The busy flag cannot desync from reality. A flag set true in one place
+   *   and false in three others is a flag that eventually stays true.
+   */
+  const [settledSeason, setSettledSeason] =
+    useState<{ season: string | null; error: string | null } | null>(null);
+
+  // Loading until the settled record is for the season being asked for.
+  // `null` on first render, which is not `seasonParam`, so the initial load
+  // reports busy without anyone setting a flag.
+  const seasonLoading = settledSeason?.season !== seasonParam;
+  const loadError =
+    settledSeason && settledSeason.season === seasonParam
+      ? settledSeason.error
+      : null;
+
   // Resolved before the hooks below, because they depend on it and a hook
   // cannot sit after the early return for the loading state.
   //
@@ -47,23 +81,31 @@ function Shell() {
       ? requestedDate
       : D.TODAY_KEY
     : null;
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
   const isMobile = useIsMobile();
 
+  // Reloads whenever the season changes. The previous season's source stays on
+  // screen, dimmed, until the new one lands — swapping it for a spinner would
+  // blank the whole page for a request that takes about as long as a date
+  // change already does.
   useEffect(() => {
     let alive = true;
-    loadDataSource()
+    loadDataSource(seasonParam ?? undefined)
       .then((src) => {
-        if (alive) setD(src);
+        if (!alive) return;
+        setD(src);
+        setSettledSeason({ season: seasonParam, error: null });
       })
       .catch((err: Error) => {
-        if (alive) setLoadError(err.message);
+        if (!alive) return;
+        // The previous season's source stays on screen behind the error, so a
+        // failed switch is recoverable by picking another season.
+        setSettledSeason({ season: seasonParam, error: err.message });
       });
     return () => { alive = false; };
-  }, []);
+  }, [seasonParam]);
 
   // ── Load the date being viewed ───────────────────────────────────────────
   //
@@ -74,8 +116,32 @@ function Shell() {
   // `dateLoading` exists so the views can dim rather than unmount. At ~170 ms a
   // spinner that replaced the board would flash and shift the layout, which
   // reads worse than the wait it is reporting.
-  const [dateLoading, setDateLoading] = useState(false);
-  const [, setDateLoaded] = useState(0);
+  /**
+   * The last date whose fetch finished, qualified by season.
+   *
+   * Qualified because the same "M-D-YYYY" key can exist in two seasons, and an
+   * unqualified match after a season switch would be a no-op `setState` — no
+   * re-render, and a board that never un-dims.
+   *
+   * This doubles as the re-render trigger. `ensureDate` fills a cache inside
+   * the data source, which React cannot observe; settling here is what tells
+   * it to look again.
+   */
+  const [settledDate, setSettledDate] = useState<string | null>(null);
+  const dateToken = D && dateKey ? `${D.SEASON_ID}|${dateKey}` : null;
+
+  // Derived, with `isDateLoaded` consulted first so an already-cached date —
+  // the opening one, every time — never flashes dim.
+  //
+  // The `settledDate` half is what makes this safe: `ensureDate` populates its
+  // cache only when rows come back, so a date that legitimately has none would
+  // leave `isDateLoaded` false forever. Deriving from that alone would dim the
+  // app permanently.
+  const dateLoading =
+    D != null &&
+    dateKey != null &&
+    !D.isDateLoaded(dateKey) &&
+    settledDate !== dateToken;
 
   useEffect(() => {
     if (!D || !dateKey) return;
@@ -85,13 +151,11 @@ function Shell() {
     if (D.isDateLoaded(dateKey)) return;
 
     let alive = true;
-    setDateLoading(true);
-    D.ensureDate(dateKey)
-      .then(() => {
-        if (!alive) return;
-        setDateLoaded((n) => n + 1);
-      })
-      .finally(() => alive && setDateLoading(false));
+    // `finally`, not `then`: a date that resolves to no rows has still been
+    // answered, and the board has to stop reporting itself as loading.
+    D.ensureDate(dateKey).finally(() => {
+      if (alive) setSettledDate(`${D.SEASON_ID}|${dateKey}`);
+    });
 
     return () => { alive = false; };
   }, [D, dateKey]);
@@ -174,6 +238,45 @@ function Shell() {
     [searchParams, setSearchParams],
   );
 
+  // ── Changing season ──────────────────────────────────────────────────────
+  //
+  // Everything else in the URL belongs to the season being left. A date is the
+  // clearest case — "4-12-2026" does not exist in 2026-27 — but a game id is
+  // worse, because game ids are namespaced per season and a stale one would
+  // simply 404 inside an open panel. All three go.
+  //
+  // Not `replace`: moving between seasons is a real navigation, and the back
+  // button should return you to the one you came from.
+  const pickSeason = useCallback(
+    (id: string) => {
+      const next = new URLSearchParams(searchParams);
+      next.set("season", id);
+      next.delete("date");
+      next.delete("game");
+      next.delete("panel");
+      setSearchParams(next);
+    },
+    [searchParams, setSearchParams],
+  );
+
+  /**
+   * The rankings URL for the current date AND season.
+   *
+   * Three places navigated to the board by hand-building "/?date=...", which
+   * dropped every other parameter. That was harmless while `?date=` was the
+   * only one; with `?season=` it silently threw you back to the default season
+   * whenever you left a profile or tapped Rankings — the board would reload a
+   * different season than the one you were reading.
+   */
+  const rankingsHref = useCallback(() => {
+    const params = new URLSearchParams();
+    if (dateKey) params.set("date", dateKey);
+    const season = searchParams.get("season");
+    if (season) params.set("season", season);
+    const qs = params.toString();
+    return qs ? `/?${qs}` : "/";
+  }, [dateKey, searchParams]);
+
   const pickDate = useCallback(
     (key: string) => {
       const next = new URLSearchParams(searchParams);
@@ -241,7 +344,11 @@ function Shell() {
       <Nav
         view={view}
         season={D.SEASON}
-        onGoRankings={() => navigate("/")}
+        seasonId={D.SEASON_ID}
+        seasons={D.AVAILABLE_SEASONS}
+        onPickSeason={pickSeason}
+        seasonBusy={seasonLoading}
+        onGoRankings={() => navigate(rankingsHref())}
         onOpenSearch={() => {
           setQuery("");
           setSearchOpen(true);
@@ -254,7 +361,7 @@ function Shell() {
           the wait it reports. */}
       <div
         style={{
-          opacity: dateLoading ? 0.55 : 1,
+          opacity: dateLoading || seasonLoading ? 0.55 : 1,
           transition: "opacity 180ms ease",
         }}
       >
@@ -278,7 +385,7 @@ function Shell() {
           gameId={searchParams.get("game")}
           onPickPanel={pickPanel}
           onPickGame={pickGame}
-          onBack={() => navigate(`/?date=${encodeURIComponent(dateKey)}`)}
+          onBack={() => navigate(rankingsHref())}
           onOpenPlayer={openPlayer}
           onTogglePanel={() => setPanelOpen(true)}
         />
@@ -304,7 +411,7 @@ function Shell() {
         <TabBar
           view={view}
           panelOpen={panelOpen}
-          onGoRankings={() => navigate(`/?date=${encodeURIComponent(dateKey)}`)}
+          onGoRankings={() => navigate(rankingsHref())}
           onOpenSearch={() => {
             setQuery("");
             setSearchOpen(true);

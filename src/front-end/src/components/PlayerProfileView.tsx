@@ -58,46 +58,86 @@ export default function PlayerProfileView({
   // Nor is there a `?? D.PLAYERS[0]` fallback anywhere below. That silently
   // rendered the league leader's profile under an unknown player's URL — a page
   // that looks completely normal and is about the wrong person.
-  const [season, setSeason] = useState<PlayerSeason | null>(null);
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "missing">("loading");
+  // ── Async state, keyed by the request it answers ─────────────────────────
+  //
+  // Each load below stores its result together with a key naming exactly what
+  // was asked for. "Is a load in flight" is then DERIVED by comparing that key
+  // against what is being asked for right now, instead of a flag raised at the
+  // top of an effect and lowered in three callbacks.
+  //
+  // The lint rule is the smaller reason. The larger one is that clearing the
+  // previous value used to be a `setState` at the top of the effect, which
+  // left one committed render where the PREVIOUS player's season sat under the
+  // new player's name. A key that does not match simply reads as "loading" —
+  // a stale answer can no longer be shown under a newer question.
+  //
+  // `D.SEASON_ID` is part of every key. Without it, switching season with a
+  // profile open would keep the other season's rank and field on screen until
+  // each refetch happened to land.
+
+  const seasonKey = `${D.SEASON_ID}|${playerName}`;
+  const [seasonResult, setSeasonResult] =
+    useState<{ key: string; season: PlayerSeason | null } | null>(null);
+
+  const season = seasonResult?.key === seasonKey ? seasonResult.season : null;
+  const loadState: "loading" | "ready" | "missing" =
+    seasonResult?.key !== seasonKey ? "loading" : season ? "ready" : "missing";
 
   useEffect(() => {
     let alive = true;
-    setSeason(null);
-    setLoadState("loading");
     D.loadPlayerSeason(playerName)
       .then((loaded) => {
-        if (!alive) return;
-        setSeason(loaded);
-        setLoadState(loaded ? "ready" : "missing");
+        if (alive) setSeasonResult({ key: seasonKey, season: loaded });
       })
-      .catch(() => alive && setLoadState("missing"));
+      .catch(() => {
+        if (alive) setSeasonResult({ key: seasonKey, season: null });
+      });
     return () => { alive = false; };
-  }, [D, playerName]);
+  }, [D, playerName, seasonKey]);
 
   // Where he sits on the selected date, and who is next to him. Refetched when
   // the date changes — that is the whole point of the date picker.
-  const [field, setField] = useState<FieldWindow | null>(null);
+  const fieldKey = `${D.SEASON_ID}|${playerName}|${dateKey}`;
+  const [fieldResult, setFieldResult] =
+    useState<{ key: string; field: FieldWindow | null } | null>(null);
+
+  const field = fieldResult?.key === fieldKey ? fieldResult.field : null;
 
   useEffect(() => {
     let alive = true;
-    setField(null);
     D.fieldAround(playerName, dateKey, FIELD_WINDOW)
-      .then((f) => alive && setField(f))
-      .catch(() => alive && setField(null));
+      .then((f) => {
+        if (alive) setFieldResult({ key: fieldKey, field: f });
+      })
+      .catch(() => {
+        if (alive) setFieldResult({ key: fieldKey, field: null });
+      });
     return () => { alive = false; };
-  }, [D, playerName, dateKey]);
+  }, [D, playerName, dateKey, fieldKey]);
 
   // ── The game panel ───────────────────────────────────────────────────────
-  const [game, setGame] = useState<PlayerGame | null>(null);
-  const [gameState, setGameState] = useState<"idle" | "loading" | "missing">("idle");
-  const [videoPlaying, setVideoPlaying] = useState(false);
+  //
+  // `panel` is deliberately NOT part of the key. Leaving the game tab and
+  // coming back to the same game should show it immediately rather than
+  // refetching a game already in hand; what must not survive that round trip
+  // is playback, which is handled below.
+  const gameKey = `${D.SEASON_ID}|${playerName}|${dateKey}|${gameId ?? "last"}`;
+  const [gameResult, setGameResult] =
+    useState<{ key: string; game: PlayerGame | null } | null>(null);
+
+  const game = gameResult?.key === gameKey ? gameResult.game : null;
+  const gameState: "idle" | "loading" | "missing" =
+    panel !== "game"
+      ? "idle"
+      : gameResult?.key !== gameKey
+        ? "loading"
+        : game
+          ? "idle"
+          : "missing";
 
   useEffect(() => {
     if (panel !== "game") return;
     let alive = true;
-    setGameState("loading");
-    setGame(null);
 
     const load = gameId
       ? D.loadGame(playerName, gameId)
@@ -105,26 +145,38 @@ export default function PlayerProfileView({
 
     load
       .then((g) => {
-        if (!alive) return;
-        setGame(g);
-        setGameState(g ? "idle" : "missing");
+        if (alive) setGameResult({ key: gameKey, game: g });
       })
-      .catch(() => alive && setGameState("missing"));
+      .catch(() => {
+        if (alive) setGameResult({ key: gameKey, game: null });
+      });
 
     return () => { alive = false; };
-  }, [D, panel, playerName, gameId, dateKey]);
+  }, [D, panel, playerName, gameId, dateKey, gameKey]);
 
+  // ── Playback ─────────────────────────────────────────────────────────────
+  //
   // Leaving an iframe mounted while the game changes plays the previous reel
   // under the new header — the most confidently wrong state this panel has.
   //
-  // Keyed on the game actually being shown, not on the params that usually
-  // imply one. With no `?game=` the panel resolves whatever game the *date*
-  // lands on, so `gameId` stays null while the content changes underneath —
-  // and a reel already playing would carry over and autoplay the next day's
-  // game unasked.
-  useEffect(() => {
-    setVideoPlaying(false);
-  }, [game?.gameId, panel, playerName]);
+  // The reel on screen is identified by the player, the game and the panel
+  // showing it — not by the params that usually imply one. With no `?game=`
+  // the panel resolves whatever game the *date* lands on, so `gameId` stays
+  // null while the content changes underneath.
+  //
+  // Reset DURING the render that changes the reel, not in an effect after it.
+  // The effect this replaces ran once that render had already committed, so
+  // for one frame the iframe was mounted with the new game's video id and
+  // `playing` still true — the next day's highlights autoplaying unasked. That
+  // frame cannot exist now: React re-renders before the browser paints.
+  const reelKey = panel === "game" && game ? `${playerName}|${game.gameId}` : null;
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [reelShown, setReelShown] = useState<string | null>(reelKey);
+
+  if (reelShown !== reelKey) {
+    setReelShown(reelKey);
+    if (videoPlaying) setVideoPlaying(false);
+  }
 
   // Every number on this page comes from the row for the selected date. Rank is
   // the exception — that comes from `field`, which knows how large a field it

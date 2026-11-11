@@ -804,3 +804,34 @@ describe("SEASON", () => {
     expect(D.SEASON).toBe("1999–00");
   });
 });
+
+// ── The season picker's inputs ─────────────────────────────────────────────
+
+describe("AVAILABLE_SEASONS", () => {
+  const option = (id: string) => ({
+    id, label: id.replace("-", "–"), gameDays: 20,
+    firstDate: "2026-10-20", lastDate: "2026-11-09",
+  });
+
+  it("carries the id alongside the label, so the picker need not parse one back", () => {
+    const D = buildDataSource([row({ date: "11-9-2026" })], "t", {
+      season: "2026-27",
+      calendar: ["2026-11-09"],
+      availableSeasons: [option("2026-27"), option("2025-26")],
+    });
+    expect(D.SEASON_ID).toBe("2026-27");
+    expect(D.SEASON).toBe("2026–27");
+    expect(D.AVAILABLE_SEASONS.map((s) => s.id)).toEqual(["2026-27", "2025-26"]);
+  });
+
+  // The fixture, and any deployment with one season built. The picker reads
+  // this to decide whether to render a dropdown at all — an empty list has to
+  // mean "no choice", not "not loaded yet".
+  it("is empty when the source offers no alternatives", () => {
+    const D = buildDataSource([row({ date: "10-21-2025" })], "t", {
+      calendar: ["2025-10-21"],
+    });
+    expect(D.AVAILABLE_SEASONS).toEqual([]);
+    expect(D.SEASON).toBe("2025–26");
+  });
+});

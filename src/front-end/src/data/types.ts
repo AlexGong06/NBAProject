@@ -262,12 +262,38 @@ export type FieldWindow = {
 };
 
 /**
+ * One season the user can switch to.
+ *
+ * `id` is the API's form ("2026-27") and travels in the URL and on the wire;
+ * `label` is the display form ("2026–27", en dash). Keeping both means the
+ * picker never has to parse a label back into a query parameter.
+ */
+export type SeasonOption = {
+  id: string;
+  label: string;
+  /** Game days ingested so far — for a season in progress, not the schedule. */
+  gameDays: number;
+  firstDate: string;
+  lastDate: string;
+};
+
+/**
  * Everything the UI needs from a data source. The fixture implements this
  * synchronously; the API adapter loads then serves from memory, so the
  * component tree stays identical either way.
  */
 export type DataSource = {
   TEAMS: Record<string, string>;
+  /**
+   * Every season this deployment can serve, newest first.
+   *
+   * Empty when the source cannot offer a choice — the offline fixture holds
+   * exactly one season and has no endpoint to ask. The picker renders nothing
+   * rather than a dropdown with one dead option.
+   */
+  AVAILABLE_SEASONS: SeasonOption[];
+  /** The season on screen as an id — "2026-27". What `?season=` carries. */
+  SEASON_ID: string;
   /**
    * The season on screen, ready to display: "2026–27", with an en dash.
    *

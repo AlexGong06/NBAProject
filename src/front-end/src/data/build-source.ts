@@ -10,7 +10,8 @@
 import { TEAMS } from "./teams";
 import type {
   DataSource, DateInfo, FieldWindow, HistoryPoint, PlayerSeason,
-  PlayerGame, RankedPlayer, RosterEntry, Snapshot, Standings, StoredRow,
+  PlayerGame, RankedPlayer, RosterEntry, SeasonOption, Snapshot, Standings,
+  StoredRow,
 } from "./types";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -142,6 +143,11 @@ export type SourceExtras = {
    * derived from the calendar instead. Both paths end at the same string.
    */
   season?: string;
+  /**
+   * Every season the source can serve. Omitted when it can only serve one, so
+   * the picker knows to render nothing rather than a one-option dropdown.
+   */
+  availableSeasons?: SeasonOption[];
 };
 
 /**
@@ -152,11 +158,13 @@ export type SourceExtras = {
  * 2026–27 — and anything earlier is the tail of the season before it, which is
  * what makes a calendar whose first date is in January still label correctly.
  */
+export function formatSeasonLabel(id: string): string {
+  const [start, end] = id.split("-");
+  return `${start}\u2013${end}`;
+}
+
 function seasonLabelOf(reported: string | undefined, firstGame: DateInfo): string {
-  if (reported) {
-    const [start, end] = reported.split("-");
-    return `${start}\u2013${end}`;
-  }
+  if (reported) return formatSeasonLabel(reported);
   const [year, month] = firstGame.iso.split("-").map(Number);
   const start = month >= 8 ? year : year - 1;
   return `${start}\u2013${String((start + 1) % 100).padStart(2, "0")}`;
@@ -679,6 +687,11 @@ export function buildDataSource(
 
   return {
     TEAMS,
+    // A choice of one is not a choice. The fixture passes nothing, and a
+    // deployment with a single season built reports one entry — both render as
+    // a plain label rather than a dropdown that cannot go anywhere.
+    AVAILABLE_SEASONS: extras.availableSeasons ?? [],
+    SEASON_ID: extras.season ?? "",
     SEASON,
     PLAYERS,
     ROSTER,

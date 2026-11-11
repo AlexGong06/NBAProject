@@ -14,8 +14,18 @@ export type DataMode = "fixture" | "api";
 export const DATA_MODE: DataMode =
   import.meta.env.VITE_DATA === "api" ? "api" : "fixture";
 
-export async function loadDataSource(): Promise<DataSource> {
-  if (DATA_MODE === "api") return loadApiSource();
+/**
+ * Load one season.
+ *
+ * `season` is omitted on first load so the API picks — which is the newest
+ * season that actually has data, not whichever one the bundle was built
+ * believing in. The picker passes an explicit id after that.
+ *
+ * The fixture ignores it: it holds one season and says so by reporting no
+ * alternatives.
+ */
+export async function loadDataSource(season?: string): Promise<DataSource> {
+  if (DATA_MODE === "api") return loadApiSource(season);
   return loadFixtureSource();
 }
 

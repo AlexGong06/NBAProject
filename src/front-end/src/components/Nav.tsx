@@ -1,11 +1,20 @@
 import { C } from "../theme";
 import { HoverButton, SearchIcon } from "./ui";
+import SeasonPicker from "./SeasonPicker";
 import { useIsMobile } from "../use-media-query";
+import type { SeasonOption } from "../data/types";
 
 type Props = {
   view: "rankings" | "profile";
   /** Display label for the season on screen, e.g. "2026–27". */
   season: string;
+  /** Id form of the same season — "2026-27". */
+  seasonId: string;
+  /** Every season that can be switched to; fewer than two hides the picker. */
+  seasons: SeasonOption[];
+  onPickSeason: (seasonId: string) => void;
+  /** True while a season is loading. */
+  seasonBusy?: boolean;
   onGoRankings: () => void;
   onOpenSearch: () => void;
   onTogglePanel: () => void;
@@ -20,7 +29,10 @@ const tabBase: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export default function Nav({ view, season, onGoRankings, onOpenSearch, onTogglePanel }: Props) {
+export default function Nav({
+  view, season, seasonId, seasons, onPickSeason, seasonBusy,
+  onGoRankings, onOpenSearch, onTogglePanel,
+}: Props) {
   const isRankings = view === "rankings";
   const isMobile = useIsMobile();
 
@@ -50,16 +62,16 @@ export default function Nav({ view, season, onGoRankings, onOpenSearch, onToggle
         <div style={{ fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 600 }}>
           MVP Tracker
         </div>
-        {!isMobile && (
-          <div
-            style={{
-              fontSize: 11, letterSpacing: "0.08em", color: C.textFaint,
-              paddingLeft: 10, borderLeft: `1px solid ${C.lineStrong}`,
-            }}
-          >
-            {season}
-          </div>
-        )}
+        {/* Shown on a phone too, unlike the static label it replaces. A
+            season label is decoration and can be dropped on a small screen;
+            the only way to reach another season is not. */}
+        <SeasonPicker
+          seasons={seasons}
+          current={seasonId}
+          currentLabel={season}
+          onPick={onPickSeason}
+          busy={seasonBusy}
+        />
       </div>
 
       {/* These two live in the bottom tab bar on a phone. Both at once would be

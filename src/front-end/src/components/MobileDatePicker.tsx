@@ -71,9 +71,21 @@ export default function MobileDatePicker({ D, dateKey, onPick }: Props) {
 
   // Follow the date when it changes from outside — the arrows, a deep link, or
   // the nearest-game-day chips on an off day.
-  useEffect(() => {
+  //
+  // Adjusted DURING the render that sees the new date, not in an effect after
+  // it. The effect this replaces ran once the strip had already painted on the
+  // old month, so a deep link into another month showed that month's cards for
+  // a frame and then jumped. React handles a `setState` here by re-rendering
+  // before the browser paints, so the jump cannot be seen.
+  //
+  // This is also what retires the `exhaustive-deps` warning on `monthOf`: the
+  // helper is simply called, not captured by a dependency array that silently
+  // omitted it.
+  const [dateKeyShown, setDateKeyShown] = useState(dateKey);
+  if (dateKeyShown !== dateKey) {
+    setDateKeyShown(dateKey);
     setMonth(monthOf(dateKey));
-  }, [dateKey]);
+  }
 
   const stripRef = useRef<HTMLDivElement | null>(null);
 

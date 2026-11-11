@@ -1,6 +1,7 @@
 import logger from "../../utils/logger";
 import { getDb } from "../../database/database";
 import { lastGameFor, lastGameIndex } from "./last-game-index";
+import { seasonScope } from "../season-scope";
 import { Router } from "express";
 
 const playersRouter = Router();
@@ -19,26 +20,40 @@ const INDEX_PROJECTION = {
   pointsPerGame: 1, mvpValue: 1, gamesPlayed: 1, teamGamesPlayed: 1,
 } as const;
 
-// GET /players
-// Every player in the league, as of the most recent date, best first.
+// GET /players?season=
+// Every player in the league, as of the most recent date of that season, best
+// first. Defaults to the current season.
 //
 // Every player who has debuted carries a row on every subsequent date, so the
 // latest date holds the complete roster — one indexed query rather than a
 // group-by-player over 83,054 rows, which would exceed Mongo's memory limit.
-playersRouter.get("/", async (_req, res) => {
+playersRouter.get("/", async (req, res) => {
+  const { season, error, status } = await seasonScope(req.query.season);
+  if (error) {
+    res.status(status).json({ message: error });
+    return;
+  }
+
   try {
     const db = await getDb();
     const col = db.collection("PlayerDailyValues");
 
-    const dates: string[] = await col.distinct("isoDate");
+    // The most recent date *of this season*, not of the collection. Without the
+    // filter this returns the newest season's roster whichever season was
+    // asked for — and the response carries no date, so nothing downstream
+    // could notice.
+    const dates: string[] = await col.distinct("isoDate", { season });
     if (dates.length === 0) {
-      res.status(404).json({ message: "No rankings data available." });
+      res.status(404).json({ message: `No rankings data for ${season}.` });
       return;
     }
     dates.sort(); // ISO, so lexicographic is chronological
 
     const rows = await col
-      .find({ isoDate: dates[dates.length - 1] }, { projection: INDEX_PROJECTION })
+      .find(
+        { season, isoDate: dates[dates.length - 1] },
+        { projection: INDEX_PROJECTION },
+      )
       .sort({ mvpValue: -1 })
       .toArray();
 
@@ -54,6 +69,12 @@ playersRouter.get("/", async (_req, res) => {
 playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
   const playerName = req.params.playerName;
 
+  const { season, error, status } = await seasonScope(req.query.season);
+  if (error) {
+    res.status(status).json({ message: error });
+    return;
+  }
+
   try {
     const db = await getDb();
     // Sorted in Mongo on `isoDate`, which is chronological as text. The
@@ -61,13 +82,18 @@ playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
     // endpoint draws a line chart, so getting that wrong plots the season out
     // of order. Every row carries the ISO twin for this reason.
     const col = db.collection("PlayerDailyValues");
+    // Scoped to one season. A player with ten seasons of rows would otherwise
+    // get one chart running across all of them, with a rank computed against a
+    // field spanning a decade.
     const results = await col
-      .find({ player: playerName })
+      .find({ season, player: playerName })
       .sort({ isoDate: -1 })
       .toArray();
 
     if (results.length === 0) {
-      res.status(404).json({ message: `No rankings found for ${playerName}.` });
+      res.status(404).json({
+        message: `No rankings found for ${playerName} in ${season}.`,
+      });
       return;
     }
 
@@ -90,7 +116,7 @@ playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
 
     const counts = await col
       .aggregate([
-        { $match: { isoDate: { $in: Object.keys(threshold) } } },
+        { $match: { season, isoDate: { $in: Object.keys(threshold) } } },
         {
           $group: {
             _id: "$isoDate",
@@ -124,7 +150,7 @@ playersRouter.get("/:playerName/daily-mvp-rankings", async (req, res) => {
     // reached through this endpoint would be missing a field the identical row
     // reached through the board has, and the profile would show a chip or not
     // depending on which path loaded it.
-    const games = await lastGameIndex();
+    const games = await lastGameIndex(season);
 
     res.json(
       results.map((row) => ({

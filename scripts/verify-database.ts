@@ -8,7 +8,7 @@
 // the raw game logs rather than trusting the numbers it is checking.
 //
 // If `build-season` had a bug, its self-checks would share it. So the recompute
-// here starts from `PlayerGameLogs2526`, the untouched event source, and
+// here starts from `PlayerGameLogs<season>`, the untouched event source, and
 // rebuilds season-to-date and the formula from scratch. Agreement across both
 // paths means the stored value is right; disagreement localises the fault
 // immediately, because only one of the two can be wrong.
@@ -20,6 +20,7 @@ import dotenv from "dotenv";
 import logger from "../src/utils/logger";
 import { scoreBreakdown } from "../src/shared/mvp-formula";
 import { CURRENT_FORMULA_VERSION } from "../src/utils/types";
+import { CURRENT_SEASON, seasonCollections } from "../src/utils/season";
 import type { PlayerGame, TeamGame } from "../src/services/nba-api/fetch-season";
 import {
   indexPlayerGames,
@@ -52,18 +53,27 @@ async function main() {
   const db = client.db("NbaDb");
 
   try {
+    // One season at a time. `PlayerDailyValues` holds every season, and
+    // recomputing a row means comparing it against the raw logs of the season
+    // it belongs to — so the scope is set once, here, and every query below
+    // carries it.
+    const season = CURRENT_SEASON;
+    const logsName = seasonCollections(season).logs;
+
     const daily = db.collection("PlayerDailyValues");
-    const logs = db.collection("PlayerGameLogs2526");
+    const logs = db.collection(logsName);
 
     // ── Shape ────────────────────────────────────────────────────────────
     console.log("\n── Collections ──────────────────────────────────────────");
     const dailyCount = await daily.countDocuments();
     const logCount = await logs.countDocuments();
-    const dates = (await daily.distinct("isoDate")).sort();
-    const players = await daily.distinct("playerId");
+    const dailySeasonCount = await daily.countDocuments({ season });
+    const dates = (await daily.distinct("isoDate", { season })).sort();
+    const players = await daily.distinct("playerId", { season });
 
-    console.log(`  PlayerDailyValues   ${dailyCount} rows`);
-    console.log(`  PlayerGameLogs2526  ${logCount} rows`);
+    console.log(`  season              ${season}`);
+    console.log(`  PlayerDailyValues   ${dailySeasonCount} rows of ${season}  (${dailyCount} across all seasons)`);
+    console.log(`  ${logsName.padEnd(20)}${logCount} rows`);
     console.log(`  dates               ${dates.length}  (${dates[0]} → ${dates[dates.length - 1]})`);
     console.log(`  players             ${players.length}`);
 
@@ -79,7 +89,7 @@ async function main() {
     let gpOverTeamGp = 0;
     let winsOverGames = 0;
 
-    const cursor = daily.find({}, { projection: { _id: 0 } });
+    const cursor = daily.find({ season }, { projection: { _id: 0 } });
     for await (const row of cursor) {
       scanned++;
 
@@ -109,7 +119,15 @@ async function main() {
       }
     }
 
-    check("all rows scanned", scanned === dailyCount, `${scanned}`);
+    // Against the season's own count, not the collection's. The cursor above is
+    // scoped to one season, so comparing it to every season's total fails by
+    // exactly the size of the other seasons — a FAIL that says "8086" beside a
+    // collection holding 91,140, which reads as a scan that stopped early.
+    check(
+      `all ${season} rows scanned`,
+      scanned === dailySeasonCount,
+      `${scanned} of ${dailySeasonCount}`,
+    );
     check("no non-finite numbers", nonFinite === 0, `${nonFinite} bad`);
     check("availability in (0, 1]", badAvailability === 0, `${badAvailability} bad`);
     check("gamesPlayed ≤ teamGamesPlayed", gpOverTeamGp === 0, `${gpOverTeamGp} bad`);
@@ -140,8 +158,9 @@ async function main() {
     const byTeam = indexTeamGames([...teamGameMap.values()]);
     console.log(`  reconstructed ${teamGameMap.size} team-games from ${allGames.length} player-games`);
 
+    // Scoped to the season under verification, like every other read here.
     const sample = await daily
-      .aggregate([{ $sample: { size: SAMPLE_SIZE } }])
+      .aggregate([{ $match: { season } }, { $sample: { size: SAMPLE_SIZE } }])
       .toArray();
 
     let compared = 0;
@@ -186,7 +205,15 @@ async function main() {
       }
     }
 
-    check(`recomputed ${compared} sampled player-dates`, compared === sample.length);
+    // `compared === sample.length` is trivially true for an empty sample, so an
+    // unbuilt season would report PASS on having recomputed nothing — the one
+    // shape of answer this script exists to refuse. The sample has to be
+    // non-empty for the comparison below to mean anything.
+    check(
+      `recomputed ${compared} sampled player-dates`,
+      sample.length > 0 && compared === sample.length,
+      sample.length === 0 ? `no stored rows for ${season} to sample` : "",
+    );
     check("every recomputed score matches what is stored", mismatched === 0, `${mismatched} mismatched`);
     console.log(`  largest disagreement: ${worst.toExponential(2)}${worstWhere ? `  (${worstWhere})` : ""}`);
 

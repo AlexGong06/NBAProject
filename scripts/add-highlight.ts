@@ -16,10 +16,12 @@ import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import logger from "../src/utils/logger";
 import { formatDuration } from "../src/services/youtube/highlight-title";
+import { CURRENT_SEASON, seasonCollections } from "../src/utils/season";
 
 dotenv.config();
 
-const SUMMARIES = "GameSummaries2526";
+const SEASON = CURRENT_SEASON;
+const SUMMARIES = seasonCollections(SEASON).summaries;
 const HIGHLIGHTS = "PlayerGameHighlights";
 
 /**
@@ -66,7 +68,7 @@ async function main(): Promise<void> {
     if (!game) {
       throw new Error(
         `No game ${gameId}. The id comes from missing-highlights.txt, or from ` +
-          `GameSummaries2526.`,
+          `${SUMMARIES}.`,
       );
     }
 

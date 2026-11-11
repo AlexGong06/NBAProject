@@ -16,11 +16,13 @@
 import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import logger from "../src/utils/logger";
+import { CURRENT_SEASON, seasonCollections } from "../src/utils/season";
 
 dotenv.config();
 
-const LOGS = "PlayerGameLogs2526";
-const SUMMARIES = "GameSummaries2526";
+const SEASON = CURRENT_SEASON;
+const LOGS = seasonCollections(SEASON).logs;
+const SUMMARIES = seasonCollections(SEASON).summaries;
 
 type Check = { label: string; failures: number; detail?: string };
 

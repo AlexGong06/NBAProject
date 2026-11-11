@@ -152,7 +152,8 @@ const n = (v: number | null | undefined): number =>
  *
  * **`isHome` is not authoritative.** On a neutral-site game both sides read `@`
  * because neither is hosting; five 2025-26 games are like this. Anything
- * user-facing should read `GameSummaries2526`, which carries the scoreboard's
+ * user-facing should read the season's `GameSummaries` collection, which
+ * carries the scoreboard's
  * own assignment and a `neutralSite` flag. This is the fallback.
  */
 export function parseMatchup(

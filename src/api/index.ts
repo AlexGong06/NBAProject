@@ -4,6 +4,7 @@ import dailyRankingsRouter from "./routes/daily-mvp-rankings";
 import playersRouter from "./routes/players";
 import gamesRouter from "./routes/games";
 import calendarRouter from "./routes/calendar";
+import seasonsRouter from "./routes/seasons";
 import logger from "../utils/logger";
 import { closeDb } from "../database/database";
 import cors from "cors";
@@ -70,6 +71,7 @@ app.use("/daily-mvp-rankings", dailyRankingsRouter);
 app.use("/players", playersRouter);
 app.use("/games", gamesRouter);
 app.use("/calendar", calendarRouter);
+app.use("/seasons", seasonsRouter);
 
 const server = app.listen(PORT);
 

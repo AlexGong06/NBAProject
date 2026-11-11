@@ -1,11 +1,13 @@
 // One game, assembled for the profile's Game view.
 //
-//   GET /games/:gameId
-//   GET /games/last?player=Nikola%20Jokic&date=4-12-2026
+//   GET /games/:gameId?player=&season=
+//   GET /games/last?player=Nikola%20Jokic&date=4-12-2026&season=2026-27
 //
-// Two collections: `PlayerGameLogs2526` holds every player's line for both
-// teams keyed by gameId (so the box score is a query, not a join), and
-// `GameSummaries2526` holds the quarter scores, home side and neutral-site flag.
+// Two collections, both per-season: `PlayerGameLogs<suffix>` holds every
+// player's line for both teams keyed by gameId (so the box score is a query,
+// not a join), and `GameSummaries<suffix>` holds the quarter scores, home side
+// and neutral-site flag. `?season=` picks the pair and defaults to the current
+// season — see src/utils/season.ts.
 //
 // The final score is *derived* by summing each side's player points rather than
 // read from the summary, so the header and the box score beneath it cannot
@@ -18,11 +20,13 @@ import { Router } from "express";
 import logger from "../../utils/logger";
 import { getDb } from "../../database/database";
 import { toDateKey, parseDateKey } from "../../utils/date-key";
+import { seasonCollections } from "../../utils/season";
+import { seasonScope } from "../season-scope";
 
 const gamesRouter = Router();
 
-const LOGS = "PlayerGameLogs2526";
-const SUMMARIES = "GameSummaries2526";
+// Shared across seasons — a highlight is keyed by game id, which the NBA
+// namespaces per season already.
 const HIGHLIGHTS = "PlayerGameHighlights";
 
 /** A shooting line as the box score prints it: "8-23". */
@@ -85,7 +89,15 @@ const toBoxRow = (r: any): BoxRow => ({
  * open. The same game viewed from the other roster is a different object, which
  * is why this takes a playerId rather than returning a neutral game record.
  */
-async function assembleGame(db: any, gameId: string, playerId: number, upToIso?: string) {
+async function assembleGame(
+  db: any,
+  season: string,
+  gameId: string,
+  playerId: number,
+  upToIso?: string,
+) {
+  const { logs: LOGS, summaries: SUMMARIES } = seasonCollections(season);
+
   const rows = await db.collection(LOGS).find({ gameId }).toArray();
   if (rows.length === 0) return null;
 
@@ -139,6 +151,7 @@ async function assembleGame(db: any, gameId: string, playerId: number, upToIso?:
 
   return {
     gameId,
+    season,
     date: toDateKey(new Date(`${self.date}T12:00:00`)),
     isoDate: self.date,
     team: self.teamAbbr,
@@ -213,9 +226,16 @@ gamesRouter.get("/last", async (req, res) => {
     return;
   }
 
+  const { season, error, status } = await seasonScope(req.query.season);
+  if (error) {
+    res.status(status).json({ message: error });
+    return;
+  }
+
   try {
     const db = await getDb();
     const iso = isoFromDateKey(parsed);
+    const { logs: LOGS } = seasonCollections(season);
 
     const last = await db
       .collection(LOGS)
@@ -226,12 +246,12 @@ gamesRouter.get("/last", async (req, res) => {
 
     if (!last) {
       res.status(404).json({
-        message: `No game for ${playerName} on or before ${dateKey}. Either the player is unknown or he had not debuted.`,
+        message: `No game for ${playerName} on or before ${dateKey} in ${season}. Either the player is unknown or he had not debuted.`,
       });
       return;
     }
 
-    const game = await assembleGame(db, last.gameId, last.playerId, iso);
+    const game = await assembleGame(db, season, last.gameId, last.playerId, iso);
     if (!game) {
       res.status(404).json({ message: `Could not assemble game ${last.gameId}.` });
       return;
@@ -256,15 +276,31 @@ gamesRouter.get("/:gameId", async (req, res) => {
     return;
   }
 
+  const { season, error, status } = await seasonScope(req.query.season);
+  if (error) {
+    res.status(status).json({ message: error });
+    return;
+  }
+
   try {
     const db = await getDb();
+    const { logs: LOGS } = seasonCollections(season);
+
     const row = await db.collection(LOGS).findOne({ gameId, playerName });
     if (!row) {
-      res.status(404).json({ message: `${playerName} has no row in game ${gameId}.` });
+      res.status(404).json({
+        message: `${playerName} has no row in game ${gameId} of ${season}.`,
+      });
       return;
     }
 
-    const game = await assembleGame(db, gameId, row.playerId, upTo ? isoFromDateKey(upTo) : undefined);
+    const game = await assembleGame(
+      db,
+      season,
+      gameId,
+      row.playerId,
+      upTo ? isoFromDateKey(upTo) : undefined,
+    );
     if (!game) {
       res.status(404).json({ message: `No game ${gameId}.` });
       return;

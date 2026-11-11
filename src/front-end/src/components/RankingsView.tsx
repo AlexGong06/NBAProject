@@ -161,10 +161,13 @@ export default function RankingsView({
                 }}
                 hoverStyle={{ borderColor: C.accentDeep, color: C.text }}
               >
-                {/* Not "Today". This jumps to the last date in the season, which
+                {/* Not "Today", and no longer "End of season": this jumps to the
+                    last date that HAS DATA, which for a season in progress is
+                    the most recent night ingested, not the finale. "Latest" is
+                    the one word true in both cases.
                     is April 12 2026 and has not been today for months. The
                     profile view already called it this. */}
-                End of season
+                Latest
               </HoverButton>
             </div>
           )}

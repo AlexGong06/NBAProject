@@ -2,13 +2,17 @@
 //
 // One cell per calendar day from opening night to the finale. Hollow, dashed
 // cells are days the NBA played no games — Thanksgiving, Christmas Eve, the NBA
-// Cup final, the All-Star break. Ten of them in 2025-26.
+// Cup final, the All-Star break. Ten of them across a full 2025-26.
 //
 // They stay visible and stay clickable. An off day still has standings: the
 // ones from the last game day, unchanged, because nobody played. This strip
 // used to describe those days as a collector's failures, back when the data
 // arrived from a nightly Basketball Reference scrape instead of being rebuilt
 // in one pass from the NBA stats API.
+//
+// For a season still in progress the strip simply ends at the most recent night
+// that has been ingested — it is drawn from the calendar, so it has no notion
+// of a schedule stretching beyond the data.
 
 import { C, label } from "../theme";
 import type { DataSource } from "../data/types";
@@ -54,7 +58,7 @@ export default function SeasonRibbon({ D, dateKey, onPick }: Props) {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-        <div style={label}>2025–26 season</div>
+        <div style={label}>{D.SEASON} season</div>
         <div style={{ fontSize: 11, color: C.textFaint }}>
           {gameDays} game days · {D.NO_GAME_DAYS.size} without games
         </div>

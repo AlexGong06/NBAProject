@@ -372,7 +372,7 @@ export default function PlayerProfileView({
           }}
           hoverStyle={{ color: C.text, borderColor: C.accentDeep }}
         >
-          End of season
+          Latest
         </HoverButton>
       </div>
 

@@ -139,6 +139,16 @@ export const DailyValueRowSchema = z.object({
   date: z.string(),
   /** ISO "YYYY-MM-DD". Sortable as text, unlike `date`. */
   isoDate: z.string(),
+  /**
+   * The season this row belongs to — "2025-26", "2026-27".
+   *
+   * `PlayerDailyValues` is one collection across every season, so without this
+   * the two do not collide, they *merge*: `_id` is `playerId:isoDate` and the
+   * dates never overlap, so nothing would fail — a `distinct("isoDate")` would
+   * simply return a 330-day season and the app would draw one continuous arc
+   * across two different leagues. Every date-scoped query filters on it.
+   */
+  season: z.string(),
 
   playerId: z.number(),
   player: z.string(),

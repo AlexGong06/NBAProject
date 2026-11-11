@@ -1,6 +1,7 @@
 import logger from "../../utils/logger";
 import { getDb } from "../../database/database";
 import { lastGameFor, lastGameIndex } from "./last-game-index";
+import { seasonScope } from "../season-scope";
 import { Router } from "express";
 
 const dailyRankingsRouter = Router();
@@ -64,6 +65,16 @@ function topParam(raw: unknown): number {
 dailyRankingsRouter.get("/", async (req, res) => {
   const top = topParam(req.query.top);
 
+  // An unknown season is a 400 and not a fallback. This route returns a row for
+  // every date it finds, so answering a stale `?season=` with the current
+  // season would hand back a different season's whole history under the
+  // requested season's name.
+  const { season, error, status } = await seasonScope(req.query.season);
+  if (error) {
+    res.status(status).json({ message: error });
+    return;
+  }
+
   try {
     const db = await getDb();
     // One indexed query per date, not one aggregation over the season. Both
@@ -73,14 +84,16 @@ dailyRankingsRouter.get("/", async (req, res) => {
     //
     // Each query here is served start-to-finish by { date: 1, mvpValue: -1 } —
     // it walks the first `top` entries of one date and stops.
-    const dates: string[] = await db.collection(COLLECTION).distinct("isoDate");
+    const dates: string[] = await db
+      .collection(COLLECTION)
+      .distinct("isoDate", { season });
     dates.sort().reverse(); // ISO, so lexicographic is chronological
 
     const perDate = await Promise.all(
       dates.map((isoDate) =>
         db
           .collection(COLLECTION)
-          .find({ isoDate })
+          .find({ season, isoDate })
           .sort({ mvpValue: -1 })
           .limit(top === Number.MAX_SAFE_INTEGER ? 0 : top)
           .toArray(),
@@ -91,7 +104,7 @@ dailyRankingsRouter.get("/", async (req, res) => {
     // board can draw a chip per row without a request per row. Attached here
     // rather than fetched by the client for the same reason the rank is: it is
     // a property of a player on a date, and the date is already known.
-    const index = await lastGameIndex();
+    const index = await lastGameIndex(season);
     const rows = perDate
       .flat()
       .map((r: any) => ({ ...r, lastGame: lastGameFor(index, r.playerId, r.isoDate) }));
@@ -118,10 +131,16 @@ dailyRankingsRouter.get("/", async (req, res) => {
  * Ranks are competition ranks — one more than the number strictly ahead — the
  * same definition players.ts uses, so the two cannot disagree.
  */
-async function fieldAround(db: any, date: string, player: string, window: number) {
+async function fieldAround(
+  db: any,
+  season: string,
+  date: string,
+  player: string,
+  window: number,
+) {
   const col = db.collection(COLLECTION);
 
-  const row = await col.findOne({ date, player });
+  const row = await col.findOne({ season, date, player });
   if (!row) return null;
 
   // Both counts are answered from the { date: 1, mvpValue: -1 } index without
@@ -129,21 +148,21 @@ async function fieldAround(db: any, date: string, player: string, window: number
   // offset. Nothing is sorted in memory, which is the constraint this whole
   // collection is queried under — see the note on the board endpoint.
   const [better, fieldSize] = await Promise.all([
-    col.countDocuments({ date, mvpValue: { $gt: row.mvpValue } }),
-    col.countDocuments({ date }),
+    col.countDocuments({ season, date, mvpValue: { $gt: row.mvpValue } }),
+    col.countDocuments({ season, date }),
   ]);
 
   const rank = better + 1;
   const start = Math.max(0, rank - 1 - window);
 
   const rows = await col
-    .find({ date })
+    .find({ season, date })
     .sort({ mvpValue: -1 })
     .skip(start)
     .limit(window * 2 + 1)
     .toArray();
 
-  const index = await lastGameIndex();
+  const index = await lastGameIndex(season);
 
   return {
     rank,
@@ -167,17 +186,29 @@ dailyRankingsRouter.get("/:date", async (req, res) => {
   const top = topParam(req.query.top);
   const around = typeof req.query.around === "string" ? req.query.around : null;
 
+  const { season, error, status } = await seasonScope(req.query.season);
+  if (error) {
+    res.status(status).json({ message: error });
+    return;
+  }
+
   try {
     const db = await getDb();
 
     if (around) {
-      const field = await fieldAround(db, date, around, windowParam(req.query.window));
+      const field = await fieldAround(
+        db,
+        season,
+        date,
+        around,
+        windowParam(req.query.window),
+      );
       if (!field) {
         // No row means he had not played his first game by this date. Every
         // player gets a row on every date from his debut onward, so absence is
         // a real answer, not a gap.
         res.status(404).json({
-          message: `No row for ${around} on ${date}. Either the player is unknown or he had not debuted by this date.`,
+          message: `No row for ${around} on ${date} in ${season}. Either the player is unknown or he had not debuted by this date.`,
         });
         return;
       }
@@ -187,7 +218,7 @@ dailyRankingsRouter.get("/:date", async (req, res) => {
 
     const results = await db
       .collection(COLLECTION)
-      .find({ date })
+      .find({ season, date })
       .sort({ mvpValue: -1 })
       .limit(top === Number.MAX_SAFE_INTEGER ? 0 : top)
       .toArray();
@@ -197,12 +228,12 @@ dailyRankingsRouter.get("/:date", async (req, res) => {
     // rather than returning an ambiguous empty array.
     if (results.length === 0) {
       res.status(404).json({
-        message: `No rankings for ${date}. No regular-season games were played on this date.`,
+        message: `No rankings for ${date} in ${season}. Either no regular-season games were played on this date, or the date is outside the season.`,
       });
       return;
     }
 
-    const index = await lastGameIndex();
+    const index = await lastGameIndex(season);
     res.json(
       results.map((r: any) => ({ ...r, lastGame: lastGameFor(index, r.playerId, r.isoDate) })),
     );

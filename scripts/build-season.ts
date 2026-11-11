@@ -7,9 +7,11 @@
 // who has debuted gets season-to-date figures and an MVP value on each of the
 // ~164 game dates. Roughly 87,000 rows, computed in memory, verified, written.
 //
-//   PlayerGameLogs2526   raw fact, exactly as the API returned it. Keeping it
-//                        makes a formula change a recompute, not a re-fetch.
-//   PlayerDailyValues    one row per player per date: inputs, every term, score.
+//   PlayerGameLogs<nn>   raw fact, exactly as the API returned it, one
+//                        collection per season. Keeping it makes a formula
+//                        change a recompute, not a re-fetch.
+//   PlayerDailyValues    one row per player per date, every season in one
+//                        collection, each row tagged with its `season`.
 //
 // No rank is stored — see DailyValueRowSchema. Both use deterministic _ids, so
 // re-running is idempotent rather than duplicating the season.
@@ -24,6 +26,7 @@ import {
   DailyValueRowSchema,
   type DailyValueRow,
 } from "../src/utils/types";
+import { CURRENT_SEASON, seasonCollections } from "../src/utils/season";
 import {
   fetchPlayerBios,
   fetchSeason,
@@ -40,8 +43,18 @@ import {
 dotenv.config();
 
 const APPLY = process.argv.includes("--apply");
-const SEASON = process.env.NBA_SEASON_LABEL || "2025-26";
-const GAME_LOG_COLLECTION = "PlayerGameLogs2526";
+
+// Which season, and therefore which raw collection. `NBA_SEASON_LABEL` is the
+// override; unset means the newest season this app knows about — see
+// src/utils/season.ts. Note that this default MOVED when the second season was
+// added: `pnpm build-season` with no environment now targets 2026-27, and
+// rebuilding 2025-26 is `NBA_SEASON_LABEL=2025-26 pnpm build-season`.
+const SEASON = CURRENT_SEASON;
+const GAME_LOG_COLLECTION = seasonCollections(SEASON).logs;
+
+// One collection for every season, partitioned by the `season` field rather
+// than by name: its rows are read one date at a time through an index, and a
+// single collection is what lets one query answer "which seasons exist".
 const DAILY_COLLECTION = "PlayerDailyValues";
 const BATCH = 5000;
 
@@ -115,6 +128,7 @@ async function main() {
       rows.push({
         date: dateKeyOf(iso),
         isoDate: iso,
+        season: SEASON,
         playerId,
         player: current.playerName,
         team: current.teamAbbr,
@@ -221,6 +235,8 @@ async function main() {
     .sort((a, b) => b.mvpValue - a.mvpValue);
 
   console.log(`\n  season            ${SEASON}`);
+  console.log(`  game logs         ${GAME_LOG_COLLECTION}`);
+  console.log(`  daily values      ${DAILY_COLLECTION}  (season: "${SEASON}")`);
   console.log(`  players           ${byPlayer.size}`);
   console.log(`  dates             ${dates.length}  (${dates[0]} → ${lastDate})`);
   console.log(`  game log rows     ${season.playerGames.length}`);
@@ -252,6 +268,29 @@ async function main() {
   const db = client.db("NbaDb");
 
   try {
+    // ── Refuse to write beside untagged rows ────────────────────────────────
+    //
+    // Every date-scoped query now filters on `season`. A row written before the
+    // field existed matches none of them, so it does not conflict — it
+    // disappears. Writing this season's rows into a collection that still holds
+    // untagged ones would therefore look like a clean success and quietly
+    // retire the whole previous season from the app.
+    //
+    // Checked with a limit of 1: this asks "are there any", not "how many", and
+    // the collection holds 83,054 rows.
+    const untagged = await db
+      .collection(DAILY_COLLECTION)
+      .countDocuments({ season: { $exists: false } }, { limit: 1 });
+
+    if (untagged > 0) {
+      throw new Error(
+        `${DAILY_COLLECTION} still holds rows with no \`season\` field. Every ` +
+          `query filters on it, so those rows would become unreachable the ` +
+          `moment this season is written.\n  ` +
+          `Tag them first:  pnpm backfill-season --apply`,
+      );
+    }
+
     const logOps: AnyBulkWriteOperation[] = season.playerGames.map((g) => ({
       replaceOne: {
         filter: { _id: `${g.playerId}:${g.gameId}` as never },
@@ -282,13 +321,21 @@ async function main() {
       logger.info(`${name}: ${written} rows written`);
     }
 
-    // Every read is "one date, best first". Both date forms are indexed because
-    // both are used: `date` is the public "M-D-YYYY" query key, `isoDate` is
-    // what the all-dates route walks. Without these the API sorts in memory and
-    // dies at 83,054 rows with QueryExceededMemoryLimitNoDiskUseAllowed.
-    await db.collection(DAILY_COLLECTION).createIndex({ date: 1, mvpValue: -1 });
-    await db.collection(DAILY_COLLECTION).createIndex({ isoDate: 1, mvpValue: -1 });
-    await db.collection(DAILY_COLLECTION).createIndex({ player: 1, isoDate: 1 });
+    // Every read is "one season, one date, best first". Both date forms are
+    // indexed because both are used: `date` is the public "M-D-YYYY" query key,
+    // `isoDate` is what the all-dates route walks. Without these the API sorts
+    // in memory and dies at 83,054 rows with
+    // QueryExceededMemoryLimitNoDiskUseAllowed.
+    //
+    // `season` leads every one of them. An index that does not begin with the
+    // field the query filters on cannot serve it, so the pre-season-field
+    // indexes — { date, mvpValue } and friends — no longer answer anything the
+    // API asks. They are left in place rather than dropped here; dropping them
+    // is a one-off, and a build script is the wrong place for it. See the note
+    // in scripts/backfill-season.ts.
+    await db.collection(DAILY_COLLECTION).createIndex({ season: 1, date: 1, mvpValue: -1 });
+    await db.collection(DAILY_COLLECTION).createIndex({ season: 1, isoDate: 1, mvpValue: -1 });
+    await db.collection(DAILY_COLLECTION).createIndex({ season: 1, player: 1, isoDate: 1 });
 
     // Covers /calendar/series completely: filter, sort and both projected
     // fields are all in the index, so the query answers 8,200 rows without
@@ -296,7 +343,10 @@ async function main() {
     // that took 1.5s.
     await db
       .collection(DAILY_COLLECTION)
-      .createIndex({ isoDate: 1, mvpValue: -1, player: 1 }, { name: "series_covering" });
+      .createIndex(
+        { season: 1, isoDate: 1, mvpValue: -1, player: 1 },
+        { name: "season_series_covering" },
+      );
 
     // The game log had only `_id` until the game view needed to read it. Its two
     // questions are "this player's most recent game on or before a date" and

@@ -4,6 +4,8 @@ import { useIsMobile } from "../use-media-query";
 
 type Props = {
   view: "rankings" | "profile";
+  /** Display label for the season on screen, e.g. "2026–27". */
+  season: string;
   onGoRankings: () => void;
   onOpenSearch: () => void;
   onTogglePanel: () => void;
@@ -18,7 +20,7 @@ const tabBase: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }: Props) {
+export default function Nav({ view, season, onGoRankings, onOpenSearch, onTogglePanel }: Props) {
   const isRankings = view === "rankings";
   const isMobile = useIsMobile();
 
@@ -55,7 +57,7 @@ export default function Nav({ view, onGoRankings, onOpenSearch, onTogglePanel }:
               paddingLeft: 10, borderLeft: `1px solid ${C.lineStrong}`,
             }}
           >
-            2025–26
+            {season}
           </div>
         )}
       </div>

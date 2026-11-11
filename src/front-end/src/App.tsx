@@ -240,6 +240,7 @@ function Shell() {
     <div style={page}>
       <Nav
         view={view}
+        season={D.SEASON}
         onGoRankings={() => navigate("/")}
         onOpenSearch={() => {
           setQuery("");

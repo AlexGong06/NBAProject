@@ -2,13 +2,13 @@
 // was at home.
 //
 //   pnpm fetch-summaries            dry run — fetches, reports, writes nothing
-//   pnpm fetch-summaries --apply    writes GameSummaries2526
+//   pnpm fetch-summaries --apply    writes GameSummaries<season>
 //
 // The game logs already give the final score (summed player points) and the
 // overtime count (team minutes: 240 in regulation, +25 per period). The
 // quarter-by-quarter line score is the one thing worth a request.
 //
-// **`boxscoresummaryv2` is broken for this season** — every 2025-26 game returns
+// **`boxscoresummaryv2` was broken for 2025-26** — every game of it returns
 // null quarters and a pre-game status, while 2023-24 works. Known NBA-side bug,
 // swar/nba_api#596, closed by PR #609 deprecating v2 in favour of v3.
 //
@@ -20,12 +20,18 @@ import { MongoClient, type AnyBulkWriteOperation } from "mongodb";
 import dotenv from "dotenv";
 import logger from "../src/utils/logger";
 import { nbaStatsJson } from "../src/services/nba-api/client";
+import { CURRENT_SEASON, seasonCollections } from "../src/utils/season";
 
 dotenv.config();
 
 const APPLY = process.argv.includes("--apply");
-const LOG_COLLECTION = "PlayerGameLogs2526";
-const SUMMARY_COLLECTION = "GameSummaries2526";
+
+// `NBA_SEASON_LABEL` picks the season; unset means the newest. The dates to
+// fetch come from that season's own game logs, so this must run after
+// `pnpm build-season --apply`.
+const SEASON = CURRENT_SEASON;
+const LOG_COLLECTION = seasonCollections(SEASON).logs;
+const SUMMARY_COLLECTION = seasonCollections(SEASON).summaries;
 
 /**
  * Pause between requests.

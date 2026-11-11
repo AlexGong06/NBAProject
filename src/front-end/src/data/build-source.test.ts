@@ -759,3 +759,48 @@ describe("loading one date at a time", () => {
     expect(board.find((r) => r.player === "A")!.delta).toBe(-1);
   });
 });
+
+// ── The season label ───────────────────────────────────────────────────────
+//
+// Two labels in the markup used to be the literal string "2025–26". The day a
+// second season existed, the app showed 2026-27's data under 2025-26's name and
+// nothing in the data layer could have noticed. These pin both paths to it: the
+// API reports a season, and the offline fixture — which has no season field at
+// all — has to derive one from its calendar.
+
+describe("SEASON", () => {
+  it("formats what the API reports, with an en dash", () => {
+    const D = buildDataSource([row({ date: "11-9-2026" })], "t", {
+      season: "2026-27",
+      calendar: ["2026-11-09"],
+    });
+    expect(D.SEASON).toBe("2026–27");
+  });
+
+  // The fixture path. `season` is absent, so the label comes off the first game
+  // date — which is what the committed rankings.json needs, since it predates
+  // the field entirely.
+  it("derives from the first game date when no season is reported", () => {
+    const D = buildDataSource([row({ date: "10-21-2025" })], "t", {
+      calendar: ["2025-10-21"],
+    });
+    expect(D.SEASON).toBe("2025–26");
+  });
+
+  // A calendar whose first date is in the new calendar year still belongs to
+  // the season that started the previous August. Deriving from the year alone
+  // would label the back half of every season as the next one.
+  it("attributes a January start to the season that began the year before", () => {
+    const D = buildDataSource([row({ date: "1-15-2027" })], "t", {
+      calendar: ["2027-01-15"],
+    });
+    expect(D.SEASON).toBe("2026–27");
+  });
+
+  it("pads the century rollover rather than printing a bare digit", () => {
+    const D = buildDataSource([row({ date: "10-28-1999" })], "t", {
+      calendar: ["1999-10-28"],
+    });
+    expect(D.SEASON).toBe("1999–00");
+  });
+});

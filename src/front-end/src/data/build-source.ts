@@ -135,7 +135,32 @@ export type SourceExtras = {
   series?: SeriesPoint[];
   /** Fetch one date's full rows, for the board. */
   fetchDate?: (dateKey: string) => Promise<StoredRow[] | null>;
+  /**
+   * The season label as the API reports it — "2026-27".
+   *
+   * Omitted by the offline fixture, which has no season field, so the label is
+   * derived from the calendar instead. Both paths end at the same string.
+   */
+  season?: string;
 };
+
+/**
+ * A display label for the season, "2026–27" with an en dash.
+ *
+ * Prefers what the source says; falls back to the first game date. An NBA
+ * season starting in August or later belongs to that year — October 2026 is
+ * 2026–27 — and anything earlier is the tail of the season before it, which is
+ * what makes a calendar whose first date is in January still label correctly.
+ */
+function seasonLabelOf(reported: string | undefined, firstGame: DateInfo): string {
+  if (reported) {
+    const [start, end] = reported.split("-");
+    return `${start}\u2013${end}`;
+  }
+  const [year, month] = firstGame.iso.split("-").map(Number);
+  const start = month >= 8 ? year : year - 1;
+  return `${start}\u2013${String((start + 1) % 100).padStart(2, "0")}`;
+}
 
 /** One player's standing on one date: the whole of what a chart needs. */
 export type SeriesPoint = {
@@ -224,6 +249,7 @@ export function buildDataSource(
 
   const NO_GAME_DAYS = new Set(DATES.filter((d) => !gameDayKeys.has(d.key)).map((d) => d.key));
   const TODAY_KEY = DATES[DATES.length - 1].key;
+  const SEASON = seasonLabelOf(extras.season, DATES[0]);
 
   const dateIndex = (dateKey: string) => DATES.findIndex((d) => d.key === dateKey);
   const dateInfo = (dateKey: string) => DATES.find((d) => d.key === dateKey) ?? null;
@@ -653,6 +679,7 @@ export function buildDataSource(
 
   return {
     TEAMS,
+    SEASON,
     PLAYERS,
     ROSTER,
     DATES,

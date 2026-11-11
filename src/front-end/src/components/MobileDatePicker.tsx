@@ -1,6 +1,7 @@
 // The season as a month rail and a strip of days — the date picker on phones.
 //
-// `SeasonRibbon` renders the whole season as 174 cells, which is legible on a
+// `SeasonRibbon` renders the whole season as one cell per day — 174 of them
+// for a full season — which is legible on a
 // desktop and gives each day about 2px on a phone. This is the same job done
 // coarse-then-fine: pick a month, then a day, with both always on screen and
 // 44px targets throughout.
@@ -255,7 +256,7 @@ export default function MobileDatePicker({ D, dateKey, onPick }: Props) {
           }}
           hoverStyle={{ borderColor: C.accentDeep, color: C.text }}
         >
-          End of season
+          Latest
         </HoverButton>
       </div>
     </div>

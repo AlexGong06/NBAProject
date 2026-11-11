@@ -268,6 +268,14 @@ export type FieldWindow = {
  */
 export type DataSource = {
   TEAMS: Record<string, string>;
+  /**
+   * The season on screen, ready to display: "2026–27", with an en dash.
+   *
+   * Derived, never hardcoded. Two labels used to be literals in the markup,
+   * which meant the day a second season existed the app showed one season's
+   * data under the other's name — and nothing in the data layer could tell.
+   */
+  SEASON: string;
   /** Each tracked player's most recent row, current leader first. */
   PLAYERS: RankedPlayer[];
   /** Every player in the league, for search — including ones never loaded. */

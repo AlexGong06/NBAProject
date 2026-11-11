@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build-season": "ts-node scripts/build-season.ts",
+    "backfill-season": "ts-node scripts/backfill-season.ts",
     "generate-two-player-fixture": "ts-node scripts/generate-two-player-fixture.ts",
     "generate-fixture": "ts-node scripts/generate-fixture.ts",
     "fetch-game-logs": "ts-node scripts/fetch-game-logs.ts",

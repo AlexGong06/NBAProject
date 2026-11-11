@@ -10,14 +10,19 @@
 //
 // So both source collections are read once and joined in memory. They are small
 // enough for this to be the cheap option: 26,638 player-games projected to four
-// fields, and 1,230 summaries. The season is complete and nothing new arrives —
-// see CLAUDE.md — so the result is cached for the process lifetime rather than
-// rebuilt per request.
+// fields, and 1,230 summaries. The result is cached for the process lifetime
+// rather than rebuilt per request — which was written for a finished season,
+// where nothing new arrives, and is NOT safe for a season still being played.
+// See the note on `lastGameIndex` below.
+//
+// One index per season, because the raw collections are partitioned per
+// season.
 
 import { getDb } from "../../database/database";
+import { seasonCollections } from "../../utils/season";
 
-const LOGS = "PlayerGameLogs2526";
-const SUMMARIES = "GameSummaries2526";
+// Shared across every season: a highlight is keyed by game id, and the NBA
+// namespaces those per season already (`0022500001` against `0022600001`).
 const HIGHLIGHTS = "PlayerGameHighlights";
 
 /**
@@ -60,7 +65,16 @@ type Index = {
   byPlayer: Map<number, PlayerGameRef[]>;
 };
 
-let cached: Promise<Index> | null = null;
+/**
+ * One index per season, built on first use.
+ *
+ * Keyed by season rather than global: the raw collections are per-season, so a
+ * single index would be built from whichever season asked first and then answer
+ * every other season with nothing. A board whose chips were all empty reads as
+ * "no data yet" rather than as a bug, which is what makes it worth preventing
+ * structurally.
+ */
+const cached = new Map<string, Promise<Index>>();
 
 /** "2026-04-12" → "4-12-2026", without going through a Date and a timezone. */
 function toDateKey(iso: string): string {
@@ -68,8 +82,9 @@ function toDateKey(iso: string): string {
   return `${Number(m)}-${Number(d)}-${y}`;
 }
 
-async function build(): Promise<Index> {
+async function build(season: string): Promise<Index> {
   const db = await getDb();
+  const { logs: LOGS, summaries: SUMMARIES } = seasonCollections(season);
 
   const [logs, summaries, highlights] = await Promise.all([
     db
@@ -136,9 +151,24 @@ async function build(): Promise<Index> {
   return { byPlayer };
 }
 
-export function lastGameIndex(): Promise<Index> {
-  if (!cached) cached = build();
-  return cached;
+/**
+ * The index for one season, cached for the process lifetime.
+ *
+ * **This cache does not expire.** It was written for a finished season, where
+ * nothing new arrives — see CLAUDE.md. For a season still being played it goes
+ * stale the moment `pnpm build-season --apply` runs, and the API keeps serving
+ * the previous run's chips until the process restarts.
+ */
+export function lastGameIndex(season: string): Promise<Index> {
+  let index = cached.get(season);
+  if (!index) {
+    index = build(season);
+    cached.set(season, index);
+    // A failed build must not be cached, or one transient error leaves this
+    // season without chips for the life of the process.
+    index.catch(() => cached.delete(season));
+  }
+  return index;
 }
 
 /**

@@ -56,7 +56,7 @@ async function getJson<T>(path: string): Promise<T> {
  */
 export async function loadApiSource(): Promise<DataSource> {
   const [calendarBody, series, roster] = await Promise.all([
-    getJson<{ gameDates: string[] }>("/calendar"),
+    getJson<{ season: string; gameDates: string[] }>("/calendar"),
     getJson<SeriesPoint[]>(`/calendar/series?top=${BOARD_DEPTH}`),
     // A missing or failing roster must not take the whole app down — the board
     // is the product, and search degrades to the players already loaded.
@@ -82,6 +82,7 @@ export async function loadApiSource(): Promise<DataSource> {
 
   return buildDataSource(opening ?? [], "The API", {
     calendar,
+    season: calendarBody.season,
     series,
     fetchDate,
     roster,

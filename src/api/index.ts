@@ -7,6 +7,7 @@ import calendarRouter from "./routes/calendar";
 import seasonsRouter from "./routes/seasons";
 import logger from "../utils/logger";
 import { closeDb } from "../database/database";
+import { warmSeasonCaches } from "./warm";
 import cors from "cors";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -93,6 +94,13 @@ server.on("listening", () => {
     process.exit(1);
   }
   logger.info(`Server running on port ${PORT}`);
+
+  // Deliberately not awaited. The socket is already bound and /health already
+  // answers, so this is background work — and it must not be able to keep the
+  // process from serving if Mongo is slow or down. `warmSeasonCaches` handles
+  // its own failures; the `.catch` is belt-and-braces against an unhandled
+  // rejection taking the process down on Node 26.
+  warmSeasonCaches().catch((err) => logger.error({ err }, "warm: unhandled"));
 });
 
 // ── Shut down when the platform says to ─────────────────────────────────────

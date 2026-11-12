@@ -41,7 +41,7 @@ let cached: { season: string | null; at: number } | null = null;
  * Ordered by the declared list rather than by sorting the strings, so "newest"
  * stays one definition — see the note on `SEASONS`.
  */
-async function seasonsWithData(): Promise<string[]> {
+export async function seasonsWithData(): Promise<string[]> {
   const db = await getDb();
   const present: string[] = await db.collection(COLLECTION).distinct("season");
   const have = new Set(present);

@@ -43,6 +43,8 @@ src/
   api/
     index.ts                       # Express server (port 3000, CORS enabled)
     season-scope.ts                # resolves ?season= against what the DB holds
+    season-cache.ts                # per-season cache: refreshes when rows change
+    warm.ts                        # builds the expensive caches at startup
     routes/
       daily-mvp-rankings.ts        # GET /daily-mvp-rankings[/:date]?top=N&season=
       players.ts                   # GET /players/:playerName/daily-mvp-rankings
@@ -139,11 +141,23 @@ by `seasonCollections()` in `src/utils/season.ts` — never written as literals.
   at all has been built. An explicit `?season=` is honoured exactly as asked —
   a 400 when unknown, never a silent substitution to a season the caller did
   not request.
-- **Two caches assume a finished season and do NOT expire.**
-  `lastGameIndex()` (per season) and `calendar.ts`'s `seriesCache` are both
-  built once per process. For 2026-27, in progress, they hold whatever was true
-  at first request: run `pnpm build-season --apply` and the API keeps serving
-  last night's board until it restarts.
+- **The expensive caches refresh themselves; do not add a TTL beside them.**
+  `lastGameIndex()`, `calendar.ts`'s `seriesCache` and its `gameDatesCache` all
+  go through `seasonCache()` in `src/api/season-cache.ts`, which every five
+  minutes compares a cheap row-count fingerprint against the database and
+  rebuilds only when it changed. A stale value is served while that happens, so
+  no request ever waits for a rebuild and `pnpm build-season --apply` shows up
+  on the site within five minutes without a restart. The fingerprint is read
+  *before* the rows it stamps — reversing that stamps a torn read as current,
+  and no later check can detect it. A formula change that leaves the row count
+  identical is deliberately not detected: that ships as code, and a deploy
+  replaces the process.
+- **The server warms its own caches at boot** (`src/api/warm.ts`), default
+  season first, then the rest one at a time. Cold, `/calendar/series` is 6.4s
+  and the last-game index 3.0s; warm, both are under 10ms. Without this the
+  first visitor after every deploy pays all of it — and on a deployed demo the
+  first visitor is the audience. It runs after `listen`, never throws into the
+  process, and is startup work rather than a keep-alive.
 - **One highlights playlist per season, and it cannot be derived.**
   `SEASON_PLAYLISTS` in `scripts/resolve-highlights.ts` is hand-maintained; a
   season missing from it throws rather than running against last season's

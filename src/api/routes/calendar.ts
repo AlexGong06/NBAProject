@@ -9,6 +9,7 @@ import { Router } from "express";
 import logger from "../../utils/logger";
 import { getDb } from "../../database/database";
 import { seasonScope } from "../season-scope";
+import { seasonCache } from "../season-cache";
 
 const calendarRouter = Router();
 
@@ -16,6 +17,51 @@ const COLLECTION = "PlayerDailyValues";
 
 /** Board depth the app requests; the charts never plot deeper than a board. */
 const DEFAULT_TOP = 50;
+
+/**
+ * A fingerprint of one season's stored rows, for both caches below.
+ *
+ * The row count alone would miss nothing that this API can currently produce —
+ * `build-season --apply` only ever adds dates — but the newest date is carried
+ * too, because it is the value both of these caches are actually shaped by and
+ * one extra indexed lookup is free. Both reads are served by the
+ * `{ season, isoDate, mvpValue }` index without touching a document.
+ */
+export async function dailyValuesVersion(season: string): Promise<string> {
+  const db = await getDb();
+  const col = db.collection(COLLECTION);
+
+  const [rows, newest] = await Promise.all([
+    col.countDocuments({ season }),
+    col
+      .find({ season }, { projection: { _id: 0, isoDate: 1 } })
+      .sort({ isoDate: -1 })
+      .limit(1)
+      .next(),
+  ]);
+
+  return `${rows}:${newest?.isoDate ?? ""}`;
+}
+
+/**
+ * The dates a season was played on.
+ *
+ * Cached because the front end asks for this first, on every load, and a
+ * `distinct` over 83,054 rows measured 0.28s — which is 0.28s in front of the
+ * first paint, every time, for an answer that changes once a night.
+ */
+const gameDatesCache = seasonCache<string[]>({
+  label: "calendar",
+  version: dailyValuesVersion,
+  build: async (season) => {
+    const db = await getDb();
+    const dates: string[] = await db
+      .collection(COLLECTION)
+      .distinct("isoDate", { season });
+    dates.sort(); // ISO, so lexicographic is chronological
+    return dates;
+  },
+});
 
 /** "2026-04-12" → "4-12-2026", the key form the front end queries by. */
 function toDateKey(iso: string): string {
@@ -35,11 +81,7 @@ calendarRouter.get("/", async (req, res) => {
   }
 
   try {
-    const db = await getDb();
-    const dates: string[] = await db
-      .collection(COLLECTION)
-      .distinct("isoDate", { season });
-    dates.sort(); // ISO, so lexicographic is chronological
+    const dates = await gameDatesCache.get(season);
 
     if (dates.length === 0) {
       res.status(404).json({ message: `No rankings data for ${season}.` });
@@ -58,18 +100,33 @@ calendarRouter.get("/", async (req, res) => {
 type SeriesPoint = { p: string; d: string; r: number; v: number };
 
 /**
- * Built once per process, keyed by `season:depth`.
+ * Keyed by `season:depth`.
  *
- * Assembling one costs ~2.3s however it is done, and the first visitor after a
- * restart absorbs it. Keyed by season as well as depth because the two seasons
- * are different series; a depth-only key would serve whichever season warmed
- * the entry first.
+ * Assembling one costs 2.3-6.4s however it is done (measured), and whoever asks
+ * first absorbs it — which is why the server warms this at startup rather than
+ * leaving it to a visitor. Keyed by season as well as depth because the two
+ * seasons are different series; a depth-only key would serve whichever season
+ * warmed the entry first.
  *
- * **This cache does not expire** — the same caveat as `lastGameIndex`. For a
- * season still being played it holds last night's series until the process
- * restarts.
+ * A season label contains no colon, so the season is always the part before the
+ * first one.
  */
-const seriesCache = new Map<string, Promise<SeriesPoint[]>>();
+const seriesCache = seasonCache<SeriesPoint[]>({
+  label: "calendar/series",
+  version: (key) => dailyValuesVersion(key.split(":")[0]),
+  build: (key) => {
+    const [season, top] = key.split(":");
+    return buildSeries(season, Number(top));
+  },
+});
+
+/** Build one season's series at the depth the app asks for, up front. */
+export async function warmCalendar(season: string): Promise<void> {
+  await Promise.all([
+    gameDatesCache.warm(season),
+    seriesCache.warm(`${season}:${DEFAULT_TOP}`),
+  ]);
+}
 
 /**
  * The only depths that get a cache entry.
@@ -91,22 +148,8 @@ calendarRouter.get("/series", async (req, res) => {
     res.status(status).json({ message: error });
     return;
   }
-  const key = `${season}:${top}`;
-
   try {
-    const cached = seriesCache.get(key);
-    if (cached) {
-      res.json(await cached);
-      return;
-    }
-
-    const building = buildSeries(season, top);
-    seriesCache.set(key, building);
-    // A failed build must not be cached, or one transient error poisons the
-    // endpoint for the life of the process.
-    building.catch(() => seriesCache.delete(key));
-
-    res.json(await building);
+    res.json(await seriesCache.get(`${season}:${top}`));
   } catch (err) {
     logger.error(err);
     res.status(500).send("Server error");

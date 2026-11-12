@@ -10,16 +10,17 @@
 //
 // So both source collections are read once and joined in memory. They are small
 // enough for this to be the cheap option: 26,638 player-games projected to four
-// fields, and 1,230 summaries. The result is cached for the process lifetime
-// rather than rebuilt per request — which was written for a finished season,
-// where nothing new arrives, and is NOT safe for a season still being played.
-// See the note on `lastGameIndex` below.
+// fields, and 1,230 summaries. The result is cached rather than rebuilt per
+// request — and, because a season still being played gains rows every night,
+// the cache re-checks a row-count fingerprint and rebuilds itself when it
+// changes. See src/api/season-cache.ts.
 //
 // One index per season, because the raw collections are partitioned per
 // season.
 
 import { getDb } from "../../database/database";
 import { seasonCollections } from "../../utils/season";
+import { seasonCache } from "../season-cache";
 
 // Shared across every season: a highlight is keyed by game id, and the NBA
 // namespaces those per season already (`0022500001` against `0022600001`).
@@ -66,7 +67,31 @@ type Index = {
 };
 
 /**
- * One index per season, built on first use.
+ * A fingerprint of everything `build` reads, cheap enough to run on a request.
+ *
+ * The two game collections hold exactly one season each, so their document
+ * counts are the whole story and `estimatedDocumentCount` answers from
+ * collection metadata without a scan. Highlights are counted rather than
+ * estimated because that collection is shared across seasons and the count has
+ * to be filtered — and it has to be counted at all, because `hasHighlight` is
+ * built from it: `pnpm resolve-highlights --apply` changes which chips offer a
+ * reel without touching a single game log.
+ */
+async function version(season: string): Promise<string> {
+  const db = await getDb();
+  const { logs, summaries } = seasonCollections(season);
+
+  const [logCount, summaryCount, highlightCount] = await Promise.all([
+    db.collection(logs).estimatedDocumentCount(),
+    db.collection(summaries).estimatedDocumentCount(),
+    db.collection(HIGHLIGHTS).countDocuments({ videoId: { $ne: null } }),
+  ]);
+
+  return `${logCount}:${summaryCount}:${highlightCount}`;
+}
+
+/**
+ * One index per season, built on first use and refreshed when the rows change.
  *
  * Keyed by season rather than global: the raw collections are per-season, so a
  * single index would be built from whichever season asked first and then answer
@@ -74,7 +99,11 @@ type Index = {
  * "no data yet" rather than as a bug, which is what makes it worth preventing
  * structurally.
  */
-const cached = new Map<string, Promise<Index>>();
+const cache = seasonCache<Index>({
+  label: "lastGameIndex",
+  version,
+  build,
+});
 
 /** "2026-04-12" → "4-12-2026", without going through a Date and a timezone. */
 function toDateKey(iso: string): string {
@@ -152,23 +181,20 @@ async function build(season: string): Promise<Index> {
 }
 
 /**
- * The index for one season, cached for the process lifetime.
+ * The index for one season.
  *
- * **This cache does not expire.** It was written for a finished season, where
- * nothing new arrives — see CLAUDE.md. For a season still being played it goes
- * stale the moment `pnpm build-season --apply` runs, and the API keeps serving
- * the previous run's chips until the process restarts.
+ * The first call pays the ~3s build; every call after it is served from memory
+ * while a background check notices the next `pnpm build-season --apply` and
+ * rebuilds. `warmLastGameIndex` moves that first cost to server startup so a
+ * visitor does not pay it.
  */
 export function lastGameIndex(season: string): Promise<Index> {
-  let index = cached.get(season);
-  if (!index) {
-    index = build(season);
-    cached.set(season, index);
-    // A failed build must not be cached, or one transient error leaves this
-    // season without chips for the life of the process.
-    index.catch(() => cached.delete(season));
-  }
-  return index;
+  return cache.get(season);
+}
+
+/** Build the index now, so the first request does not have to. */
+export function warmLastGameIndex(season: string): Promise<void> {
+  return cache.warm(season);
 }
 
 /**

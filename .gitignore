@@ -30,6 +30,9 @@ yarn-error.log*
 # Fetched game logs, rebuildable with pnpm fetch-game-logs
 .cache/
 
+# Written by pnpm resolve-highlights — a report on the current run, not state
+missing-highlights.txt
+
 # Pre-migration collection dumps
 backups/
 

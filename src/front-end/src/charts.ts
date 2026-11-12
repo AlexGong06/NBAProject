@@ -111,10 +111,27 @@ function rankGrid(
   });
 }
 
-/** Small inline rank trace for a table row. */
+/**
+ * Small inline rank trace for a table row.
+ *
+ * The domain comes from `rankDomain`, for the reason that function documents —
+ * and this is the caller that learned it the hard way. A hardcoded top-8 axis
+ * put 9 of the 10 rows on a sample board outside their own 116x30 box: Curry,
+ * who had been as low as #46, was drawn 119px below it. Because the SVG sets
+ * `overflow: visible` so the end dot is not clipped, those lines did not
+ * disappear — they were painted across the caption underneath, and the part of
+ * each climb that happened outside the top 8 was lost. Wembanyama's rise from
+ * #27 to #1 rendered as a line that began at #9.
+ *
+ * With the domain following the data, `rankGeometry` maps every rank into
+ * `[pad.t, h - pad.b]` by construction, so a row can no longer paint outside
+ * itself. Players who stayed inside the top 8 still get the 1-8 axis, so the
+ * contenders remain comparable with each other.
+ */
 export function sparkline(D: DataSource, name: string, dateKey: string, w: number, h: number) {
   const pts = D.history(name, dateKey, 14);
-  const g = rankGeometry(pts, w, h, { l: 2, r: 4, t: 4, b: 4 }, 8);
+  const { lo, hi } = rankDomain([pts]);
+  const g = rankGeometry(pts, w, h, { l: 2, r: 4, t: 4, b: 4 }, hi, lo);
   const last = g.dots[g.dots.length - 1] ?? { x: 0, y: 0 };
   return {
     points: g.dots.map((d) => `${d.x.toFixed(1)},${d.y.toFixed(1)}`).join(" "),

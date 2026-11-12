@@ -1,7 +1,7 @@
 Games with no highlight reel on the NBA's
 "Nightly Full Game Highlights | 2026-27 Season" playlist.
 
-Generated 2026-11-11T01:17:55.216Z — 4 of 154 games.
+Generated 2026-11-12T03:48:44.564Z — 4 of 164 games.
 
 Add one with:  pnpm add-highlight <gameId> <youtubeVideoId>
 

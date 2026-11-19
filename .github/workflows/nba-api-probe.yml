@@ -1,0 +1,93 @@
+# Does stats.nba.com answer a GitHub-hosted runner?
+#
+# A manual button, on purpose. There is no `schedule:` here and there should
+# not be: this workflow exists to answer one question once, not to keep a
+# pipeline running. If the answer turns out to be yes, the scheduled workflow
+# that follows is a different file.
+#
+# Reads no secrets and touches no database. It makes two unauthenticated GET
+# requests and reports whether they were answered, so there is nothing here to
+# leak and nothing to write.
+#
+# READ IT AGAINST THE LOCAL CONTROL. This API declines by going silent, so a
+# timeout here is ambiguous on its own — the endpoint may simply be down. Run
+#
+#     npx ts-node scripts/probe-nba-api.ts
+#
+# on the laptop within a few minutes and compare the pair. The script's header
+# comment has the truth table.
+
+name: NBA API address probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout_ms:
+        description: "Per-call timeout in ms. A decline burns the whole budget, so keep it short."
+        required: false
+        default: "45000"
+
+# Nothing is written, so nothing needs write access.
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Evidence, not decoration: if the probe fails, the next question is
+      # always "fails from where?" — and the answer should be in the log
+      # rather than inferred. This is the runner's throwaway address, not
+      # anything of yours.
+      - name: Where is this runner
+        run: |
+          echo "public IP:  $(curl -s --max-time 10 https://api.ipify.org || echo unavailable)"
+          echo "reverse:    $(curl -s --max-time 10 https://ipinfo.io/org || echo unavailable)"
+          echo "runner:     ${{ runner.os }} / ${{ runner.arch }}"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `shell: bash` is load-bearing. GitHub's default for `run` is `bash -e`
+      # with no pipefail, so a pipe into tee would return TEE's exit code and
+      # a probe that timed out would report success — the one failure a test
+      # instrument must never have.
+      - name: Probe
+        id: probe
+        shell: bash
+        run: npx ts-node scripts/probe-nba-api.ts | tee probe.txt
+        env:
+          PROBE_TIMEOUT_MS: ${{ inputs.timeout_ms }}
+
+      # Runs either way, so the verdict is on the run's summary page and not
+      # only inside a collapsed log step.
+      - name: Verdict
+        if: always()
+        run: |
+          {
+            echo '## stats.nba.com from a GitHub runner'
+            echo
+            echo 'Probe step outcome: **${{ steps.probe.outcome }}**'
+            echo
+            echo '```'
+            cat probe.txt 2>/dev/null || echo "the probe produced no output"
+            echo '```'
+            echo
+            echo "Now run the control on the laptop and compare:"
+            echo
+            echo '```'
+            echo 'npx ts-node scripts/probe-nba-api.ts'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
